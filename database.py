@@ -148,6 +148,37 @@ def init_database():
         )
     """)
 
+    # Past papers table - for tracking practice papers
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS past_papers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            subject_id INTEGER NOT NULL,
+            paper_name TEXT NOT NULL,
+            exam_board TEXT,
+            year TEXT,
+            paper_number TEXT,
+            total_marks INTEGER NOT NULL,
+            completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            time_taken_minutes INTEGER,
+            notes TEXT,
+            FOREIGN KEY (subject_id) REFERENCES subjects(id)
+        )
+    """)
+
+    # Past paper questions - individual question scores
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS paper_questions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            paper_id INTEGER NOT NULL,
+            question_number TEXT NOT NULL,
+            topic TEXT,
+            max_marks INTEGER NOT NULL,
+            marks_achieved INTEGER NOT NULL,
+            notes TEXT,
+            FOREIGN KEY (paper_id) REFERENCES past_papers(id)
+        )
+    """)
+
     conn.commit()
     conn.close()
 
@@ -1190,6 +1221,309 @@ def get_recent_notes(limit: int = 5) -> list:
     notes = cursor.fetchall()
     conn.close()
     return rows_to_dicts(notes)
+
+
+# =============================================================================
+# PAST PAPER FUNCTIONS
+# =============================================================================
+
+def add_past_paper(subject_id: int, paper_name: str, total_marks: int,
+                   exam_board: str = None, year: str = None, paper_number: str = None,
+                   time_taken_minutes: int = None, notes: str = None) -> int:
+    """Add a new past paper record. Returns the paper ID."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """INSERT INTO past_papers
+           (subject_id, paper_name, total_marks, exam_board, year, paper_number, time_taken_minutes, notes)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        (subject_id, paper_name, total_marks, exam_board, year, paper_number, time_taken_minutes, notes)
+    )
+    conn.commit()
+    paper_id = cursor.lastrowid
+    conn.close()
+    return paper_id
+
+
+def add_paper_question(paper_id: int, question_number: str, max_marks: int,
+                       marks_achieved: int, topic: str = None, notes: str = None) -> int:
+    """Add a question result to a past paper. Returns the question ID."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """INSERT INTO paper_questions
+           (paper_id, question_number, max_marks, marks_achieved, topic, notes)
+           VALUES (?, ?, ?, ?, ?, ?)""",
+        (paper_id, question_number, max_marks, marks_achieved, topic, notes)
+    )
+    conn.commit()
+    question_id = cursor.lastrowid
+    conn.close()
+    return question_id
+
+
+def get_all_past_papers(subject_id: int = None) -> list:
+    """Get all past papers, optionally filtered by subject."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    if subject_id:
+        cursor.execute("""
+            SELECT pp.*, s.name as subject_name, s.colour as subject_colour,
+                   (SELECT SUM(marks_achieved) FROM paper_questions WHERE paper_id = pp.id) as marks_achieved
+            FROM past_papers pp
+            JOIN subjects s ON pp.subject_id = s.id
+            WHERE pp.subject_id = ?
+            ORDER BY pp.completed_at DESC
+        """, (subject_id,))
+    else:
+        cursor.execute("""
+            SELECT pp.*, s.name as subject_name, s.colour as subject_colour,
+                   (SELECT SUM(marks_achieved) FROM paper_questions WHERE paper_id = pp.id) as marks_achieved
+            FROM past_papers pp
+            JOIN subjects s ON pp.subject_id = s.id
+            ORDER BY pp.completed_at DESC
+        """)
+
+    papers = cursor.fetchall()
+    conn.close()
+    return rows_to_dicts(papers)
+
+
+def get_past_paper_by_id(paper_id: int):
+    """Get a single past paper by ID with its questions."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    # Get paper details
+    cursor.execute("""
+        SELECT pp.*, s.name as subject_name, s.colour as subject_colour
+        FROM past_papers pp
+        JOIN subjects s ON pp.subject_id = s.id
+        WHERE pp.id = ?
+    """, (paper_id,))
+    paper = cursor.fetchone()
+
+    if paper:
+        paper = row_to_dict(paper)
+
+        # Get questions for this paper
+        cursor.execute("""
+            SELECT * FROM paper_questions
+            WHERE paper_id = ?
+            ORDER BY question_number
+        """, (paper_id,))
+        paper['questions'] = rows_to_dicts(cursor.fetchall())
+
+        # Calculate total marks achieved
+        paper['marks_achieved'] = sum(q['marks_achieved'] for q in paper['questions'])
+        paper['percentage'] = round((paper['marks_achieved'] / paper['total_marks']) * 100, 1) if paper['total_marks'] > 0 else 0
+
+    conn.close()
+    return paper
+
+
+def delete_past_paper(paper_id: int):
+    """Delete a past paper and its questions."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    # Delete questions first
+    cursor.execute("DELETE FROM paper_questions WHERE paper_id = ?", (paper_id,))
+    # Delete paper
+    cursor.execute("DELETE FROM past_papers WHERE id = ?", (paper_id,))
+    conn.commit()
+    conn.close()
+
+
+def get_topic_performance(subject_id: int = None) -> list:
+    """Get performance breakdown by topic across all past papers."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    if subject_id:
+        cursor.execute("""
+            SELECT
+                pq.topic,
+                s.name as subject_name,
+                s.colour as subject_colour,
+                COUNT(*) as question_count,
+                SUM(pq.max_marks) as total_possible,
+                SUM(pq.marks_achieved) as total_achieved,
+                ROUND(CAST(SUM(pq.marks_achieved) AS FLOAT) / SUM(pq.max_marks) * 100, 1) as percentage
+            FROM paper_questions pq
+            JOIN past_papers pp ON pq.paper_id = pp.id
+            JOIN subjects s ON pp.subject_id = s.id
+            WHERE pq.topic IS NOT NULL AND pq.topic != '' AND pp.subject_id = ?
+            GROUP BY pq.topic, s.id
+            ORDER BY percentage ASC
+        """, (subject_id,))
+    else:
+        cursor.execute("""
+            SELECT
+                pq.topic,
+                s.name as subject_name,
+                s.colour as subject_colour,
+                COUNT(*) as question_count,
+                SUM(pq.max_marks) as total_possible,
+                SUM(pq.marks_achieved) as total_achieved,
+                ROUND(CAST(SUM(pq.marks_achieved) AS FLOAT) / SUM(pq.max_marks) * 100, 1) as percentage
+            FROM paper_questions pq
+            JOIN past_papers pp ON pq.paper_id = pp.id
+            JOIN subjects s ON pp.subject_id = s.id
+            WHERE pq.topic IS NOT NULL AND pq.topic != ''
+            GROUP BY pq.topic, s.id
+            ORDER BY percentage ASC
+        """)
+
+    results = cursor.fetchall()
+    conn.close()
+    return rows_to_dicts(results)
+
+
+def get_subject_paper_stats(subject_id: int = None) -> list:
+    """Get overall stats for each subject from past papers."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    if subject_id:
+        cursor.execute("""
+            SELECT
+                s.id as subject_id,
+                s.name as subject_name,
+                s.colour as subject_colour,
+                COUNT(DISTINCT pp.id) as paper_count,
+                SUM(pp.total_marks) as total_possible,
+                SUM(pq.marks_achieved) as total_achieved,
+                ROUND(CAST(SUM(pq.marks_achieved) AS FLOAT) / SUM(pp.total_marks) * 100, 1) as average_percentage
+            FROM subjects s
+            LEFT JOIN past_papers pp ON s.id = pp.subject_id
+            LEFT JOIN paper_questions pq ON pp.id = pq.paper_id
+            WHERE s.id = ?
+            GROUP BY s.id
+        """, (subject_id,))
+    else:
+        cursor.execute("""
+            SELECT
+                s.id as subject_id,
+                s.name as subject_name,
+                s.colour as subject_colour,
+                COUNT(DISTINCT pp.id) as paper_count,
+                SUM(pp.total_marks) as total_possible,
+                SUM(pq.marks_achieved) as total_achieved,
+                ROUND(CAST(SUM(pq.marks_achieved) AS FLOAT) / NULLIF(SUM(pp.total_marks), 0) * 100, 1) as average_percentage
+            FROM subjects s
+            LEFT JOIN past_papers pp ON s.id = pp.subject_id
+            LEFT JOIN paper_questions pq ON pp.id = pq.paper_id
+            GROUP BY s.id
+            HAVING paper_count > 0
+            ORDER BY average_percentage ASC
+        """)
+
+    results = cursor.fetchall()
+    conn.close()
+    return rows_to_dicts(results)
+
+
+def get_weak_topics(limit: int = 10) -> list:
+    """Get topics with lowest performance (weak areas to focus on)."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT
+            pq.topic,
+            s.name as subject_name,
+            s.colour as subject_colour,
+            COUNT(*) as question_count,
+            SUM(pq.max_marks) as total_possible,
+            SUM(pq.marks_achieved) as total_achieved,
+            ROUND(CAST(SUM(pq.marks_achieved) AS FLOAT) / SUM(pq.max_marks) * 100, 1) as percentage
+        FROM paper_questions pq
+        JOIN past_papers pp ON pq.paper_id = pp.id
+        JOIN subjects s ON pp.subject_id = s.id
+        WHERE pq.topic IS NOT NULL AND pq.topic != ''
+        GROUP BY pq.topic, s.id
+        HAVING question_count >= 1
+        ORDER BY percentage ASC
+        LIMIT ?
+    """, (limit,))
+
+    results = cursor.fetchall()
+    conn.close()
+    return rows_to_dicts(results)
+
+
+def get_recent_papers(limit: int = 5) -> list:
+    """Get most recent past papers."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT pp.*, s.name as subject_name, s.colour as subject_colour,
+               (SELECT SUM(marks_achieved) FROM paper_questions WHERE paper_id = pp.id) as marks_achieved
+        FROM past_papers pp
+        JOIN subjects s ON pp.subject_id = s.id
+        ORDER BY pp.completed_at DESC
+        LIMIT ?
+    """, (limit,))
+
+    papers = cursor.fetchall()
+    conn.close()
+    return rows_to_dicts(papers)
+
+
+def get_paper_count() -> int:
+    """Get total number of past papers."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) as count FROM past_papers")
+    result = cursor.fetchone()
+    conn.close()
+    return result['count'] if result else 0
+
+
+def get_progress_over_time(subject_id: int = None, limit: int = 10) -> list:
+    """Get paper scores over time to track progress."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    if subject_id:
+        cursor.execute("""
+            SELECT
+                pp.id,
+                pp.paper_name,
+                pp.completed_at,
+                pp.total_marks,
+                s.name as subject_name,
+                (SELECT SUM(marks_achieved) FROM paper_questions WHERE paper_id = pp.id) as marks_achieved,
+                ROUND(CAST((SELECT SUM(marks_achieved) FROM paper_questions WHERE paper_id = pp.id) AS FLOAT)
+                      / pp.total_marks * 100, 1) as percentage
+            FROM past_papers pp
+            JOIN subjects s ON pp.subject_id = s.id
+            WHERE pp.subject_id = ?
+            ORDER BY pp.completed_at ASC
+            LIMIT ?
+        """, (subject_id, limit))
+    else:
+        cursor.execute("""
+            SELECT
+                pp.id,
+                pp.paper_name,
+                pp.completed_at,
+                pp.total_marks,
+                s.name as subject_name,
+                (SELECT SUM(marks_achieved) FROM paper_questions WHERE paper_id = pp.id) as marks_achieved,
+                ROUND(CAST((SELECT SUM(marks_achieved) FROM paper_questions WHERE paper_id = pp.id) AS FLOAT)
+                      / pp.total_marks * 100, 1) as percentage
+            FROM past_papers pp
+            JOIN subjects s ON pp.subject_id = s.id
+            ORDER BY pp.completed_at ASC
+            LIMIT ?
+        """, (limit,))
+
+    results = cursor.fetchall()
+    conn.close()
+    return rows_to_dicts(results)
 
 
 # =============================================================================

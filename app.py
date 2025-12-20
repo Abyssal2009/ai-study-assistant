@@ -351,7 +351,7 @@ with st.sidebar:
 
     page = st.radio(
         "Navigate",
-        ["Dashboard", "Bubble Ace", "What Next?", "Homework", "Exams", "Flashcards", "Notes", "Focus Timer", "Subjects", "Statistics", "Settings"],
+        ["Dashboard", "Bubble Ace", "What Next?", "Homework", "Exams", "Flashcards", "Notes", "Past Papers", "Focus Timer", "Subjects", "Statistics", "Settings"],
         label_visibility="collapsed"
     )
 
@@ -1792,6 +1792,346 @@ elif page == "Notes":
 
 
 # =============================================================================
+# PAST PAPERS PAGE
+# =============================================================================
+
+elif page == "Past Papers":
+    st.title("📄 Past Paper Analysis")
+    st.markdown("Track your practice papers and identify weak areas to focus on.")
+
+    # Initialize database
+    db.init_database()
+
+    subjects = db.get_all_subjects()
+
+    if not subjects:
+        st.warning("Please add subjects first in the Subjects page.")
+        st.stop()
+
+    # Session state
+    if 'viewing_paper_id' not in st.session_state:
+        st.session_state.viewing_paper_id = None
+    if 'adding_paper' not in st.session_state:
+        st.session_state.adding_paper = False
+
+    # Tabs for different views
+    tab1, tab2, tab3 = st.tabs(["📊 Analysis", "📝 Add Paper", "📋 All Papers"])
+
+    # ===================
+    # TAB 1: ANALYSIS
+    # ===================
+    with tab1:
+        paper_count = db.get_paper_count()
+
+        if paper_count == 0:
+            st.info("No past papers recorded yet. Go to 'Add Paper' tab to log your first one!")
+        else:
+            # Overview stats
+            st.markdown("### 📈 Overview")
+            col1, col2, col3, col4 = st.columns(4)
+
+            with col1:
+                st.markdown(f"""
+                <div class="stat-card-blue">
+                    <h1 style="font-size: 2.5rem; margin: 0; color: white !important; -webkit-text-fill-color: white;">{paper_count}</h1>
+                    <p style="margin: 5px 0 0 0; font-size: 0.9rem;">Papers Done</p>
+                </div>
+                """, unsafe_allow_html=True)
+
+            # Calculate overall average
+            all_papers = db.get_all_past_papers()
+            total_achieved = sum(p['marks_achieved'] or 0 for p in all_papers)
+            total_possible = sum(p['total_marks'] for p in all_papers)
+            overall_avg = round((total_achieved / total_possible) * 100, 1) if total_possible > 0 else 0
+
+            with col2:
+                avg_color = "stat-card-green" if overall_avg >= 70 else ("stat-card-orange" if overall_avg >= 50 else "stat-card")
+                st.markdown(f"""
+                <div class="{avg_color}">
+                    <h1 style="font-size: 2.5rem; margin: 0; color: white !important; -webkit-text-fill-color: white;">{overall_avg}%</h1>
+                    <p style="margin: 5px 0 0 0; font-size: 0.9rem;">Average Score</p>
+                </div>
+                """, unsafe_allow_html=True)
+
+            # Subject count
+            subject_stats = db.get_subject_paper_stats()
+            with col3:
+                st.markdown(f"""
+                <div class="stat-card">
+                    <h1 style="font-size: 2.5rem; margin: 0; color: white !important; -webkit-text-fill-color: white;">{len(subject_stats)}</h1>
+                    <p style="margin: 5px 0 0 0; font-size: 0.9rem;">Subjects Covered</p>
+                </div>
+                """, unsafe_allow_html=True)
+
+            # Weak topics count
+            weak_topics = db.get_weak_topics(5)
+            with col4:
+                st.markdown(f"""
+                <div class="stat-card-orange">
+                    <h1 style="font-size: 2.5rem; margin: 0; color: white !important; -webkit-text-fill-color: white;">{len(weak_topics)}</h1>
+                    <p style="margin: 5px 0 0 0; font-size: 0.9rem;">Weak Areas</p>
+                </div>
+                """, unsafe_allow_html=True)
+
+            st.markdown("---")
+
+            # Two column layout
+            col_left, col_right = st.columns(2)
+
+            with col_left:
+                # Weak topics (areas to focus on)
+                st.markdown("### 🎯 Areas to Focus On")
+                if weak_topics:
+                    for topic in weak_topics:
+                        pct = topic['percentage'] or 0
+                        color = "#e74c3c" if pct < 50 else ("#f39c12" if pct < 70 else "#27ae60")
+                        st.markdown(f"""
+                        <div class="homework-card" style="border-left-color: {topic['subject_colour']};">
+                            <strong>{topic['topic']}</strong>
+                            <span style="float: right; color: {color}; font-weight: bold;">{pct}%</span><br>
+                            <span class="subject-badge" style="background-color: {topic['subject_colour']};">
+                                {topic['subject_name']}
+                            </span>
+                            <span style="color: #888; font-size: 0.8rem;"> • {topic['question_count']} questions</span>
+                        </div>
+                        """, unsafe_allow_html=True)
+                else:
+                    st.info("Add topics to your questions to see analysis here.")
+
+            with col_right:
+                # Subject performance
+                st.markdown("### 📚 Subject Performance")
+                if subject_stats:
+                    for subj in subject_stats:
+                        pct = subj['average_percentage'] or 0
+                        color = "#e74c3c" if pct < 50 else ("#f39c12" if pct < 70 else "#27ae60")
+                        st.markdown(f"""
+                        <div class="homework-card" style="border-left-color: {subj['subject_colour']};">
+                            <strong>{subj['subject_name']}</strong>
+                            <span style="float: right; color: {color}; font-weight: bold;">{pct}%</span><br>
+                            <span style="color: #888; font-size: 0.8rem;">{subj['paper_count']} paper(s) • {subj['total_achieved'] or 0}/{subj['total_possible'] or 0} marks</span>
+                        </div>
+                        """, unsafe_allow_html=True)
+                else:
+                    st.info("No papers recorded yet.")
+
+            # Progress over time
+            st.markdown("---")
+            st.markdown("### 📈 Progress Over Time")
+
+            progress = db.get_progress_over_time(limit=15)
+            if progress:
+                # Simple bar chart using Streamlit
+                chart_data = {
+                    'Paper': [p['paper_name'][:20] + '...' if len(p['paper_name']) > 20 else p['paper_name'] for p in progress],
+                    'Score (%)': [p['percentage'] or 0 for p in progress]
+                }
+                st.bar_chart(chart_data, x='Paper', y='Score (%)')
+            else:
+                st.info("Complete more papers to see your progress over time.")
+
+    # ===================
+    # TAB 2: ADD PAPER
+    # ===================
+    with tab2:
+        st.markdown("### 📝 Log a Past Paper")
+
+        with st.form("add_paper_form"):
+            col1, col2 = st.columns(2)
+
+            with col1:
+                paper_subject = st.selectbox(
+                    "Subject",
+                    options=subjects,
+                    format_func=lambda x: x['name']
+                )
+                paper_name = st.text_input(
+                    "Paper Name",
+                    placeholder="e.g., Biology Paper 1 - Cells and Organisation"
+                )
+                paper_total = st.number_input(
+                    "Total Marks",
+                    min_value=1,
+                    max_value=500,
+                    value=60
+                )
+
+            with col2:
+                paper_board = st.selectbox(
+                    "Exam Board",
+                    options=["AQA", "Edexcel", "OCR", "WJEC", "Other"]
+                )
+                paper_year = st.text_input(
+                    "Year (optional)",
+                    placeholder="e.g., 2023"
+                )
+                paper_time = st.number_input(
+                    "Time Taken (minutes, optional)",
+                    min_value=0,
+                    max_value=300,
+                    value=0
+                )
+
+            paper_notes = st.text_area(
+                "Notes (optional)",
+                placeholder="Any observations about this paper..."
+            )
+
+            st.markdown("---")
+            st.markdown("### 📊 Enter Your Scores")
+            st.markdown("Add each question's score. Optionally add the topic for better analysis.")
+
+            # Dynamic question entry
+            num_questions = st.number_input(
+                "Number of Questions",
+                min_value=1,
+                max_value=50,
+                value=5
+            )
+
+            questions_data = []
+            for i in range(int(num_questions)):
+                st.markdown(f"**Question {i+1}**")
+                q_col1, q_col2, q_col3 = st.columns([1, 1, 2])
+
+                with q_col1:
+                    max_marks = st.number_input(
+                        "Max Marks",
+                        min_value=1,
+                        max_value=50,
+                        value=6,
+                        key=f"max_{i}"
+                    )
+                with q_col2:
+                    achieved = st.number_input(
+                        "Your Marks",
+                        min_value=0,
+                        max_value=50,
+                        value=0,
+                        key=f"achieved_{i}"
+                    )
+                with q_col3:
+                    topic = st.text_input(
+                        "Topic (optional)",
+                        placeholder="e.g., Cell Division",
+                        key=f"topic_{i}"
+                    )
+
+                questions_data.append({
+                    'number': str(i + 1),
+                    'max_marks': max_marks,
+                    'achieved': min(achieved, max_marks),  # Can't exceed max
+                    'topic': topic
+                })
+
+            if st.form_submit_button("💾 Save Paper", type="primary"):
+                if paper_name and paper_total:
+                    # Add the paper
+                    paper_id = db.add_past_paper(
+                        subject_id=paper_subject['id'],
+                        paper_name=paper_name,
+                        total_marks=paper_total,
+                        exam_board=paper_board,
+                        year=paper_year if paper_year else None,
+                        time_taken_minutes=paper_time if paper_time > 0 else None,
+                        notes=paper_notes if paper_notes else None
+                    )
+
+                    # Add questions
+                    for q in questions_data:
+                        db.add_paper_question(
+                            paper_id=paper_id,
+                            question_number=q['number'],
+                            max_marks=q['max_marks'],
+                            marks_achieved=q['achieved'],
+                            topic=q['topic'] if q['topic'] else None
+                        )
+
+                    total_achieved = sum(q['achieved'] for q in questions_data)
+                    percentage = round((total_achieved / paper_total) * 100, 1)
+
+                    st.success(f"✅ Paper saved! You scored {total_achieved}/{paper_total} ({percentage}%)")
+                    st.balloons()
+                else:
+                    st.error("Please fill in the paper name and total marks.")
+
+    # ===================
+    # TAB 3: ALL PAPERS
+    # ===================
+    with tab3:
+        st.markdown("### 📋 All Past Papers")
+
+        # Filter by subject
+        filter_subject = st.selectbox(
+            "Filter by Subject",
+            options=[{"id": None, "name": "All Subjects"}] + subjects,
+            format_func=lambda x: x['name'],
+            key="paper_filter"
+        )
+
+        papers = db.get_all_past_papers(filter_subject['id'] if filter_subject['id'] else None)
+
+        if papers:
+            for paper in papers:
+                achieved = paper['marks_achieved'] or 0
+                percentage = round((achieved / paper['total_marks']) * 100, 1) if paper['total_marks'] > 0 else 0
+                pct_color = "#27ae60" if percentage >= 70 else ("#f39c12" if percentage >= 50 else "#e74c3c")
+
+                with st.expander(f"**{paper['paper_name']}** - {percentage}%"):
+                    col1, col2 = st.columns([2, 1])
+
+                    with col1:
+                        st.markdown(f"""
+                        <span class="subject-badge" style="background-color: {paper['subject_colour']};">
+                            {paper['subject_name']}
+                        </span>
+                        """, unsafe_allow_html=True)
+
+                        if paper['exam_board']:
+                            st.write(f"**Exam Board:** {paper['exam_board']}")
+                        if paper['year']:
+                            st.write(f"**Year:** {paper['year']}")
+                        if paper['time_taken_minutes']:
+                            st.write(f"**Time Taken:** {paper['time_taken_minutes']} minutes")
+                        if paper['notes']:
+                            st.write(f"**Notes:** {paper['notes']}")
+
+                        st.write(f"**Completed:** {paper['completed_at'][:10] if paper['completed_at'] else 'Unknown'}")
+
+                    with col2:
+                        st.markdown(f"""
+                        <div style="text-align: center; padding: 20px;
+                                    background: linear-gradient(135deg, {pct_color}22, {pct_color}11);
+                                    border-radius: 12px;">
+                            <h1 style="margin: 0; color: {pct_color};">{percentage}%</h1>
+                            <p style="margin: 5px 0 0 0;">{achieved}/{paper['total_marks']} marks</p>
+                        </div>
+                        """, unsafe_allow_html=True)
+
+                    # View details button
+                    if st.button("View Question Breakdown", key=f"view_{paper['id']}"):
+                        full_paper = db.get_past_paper_by_id(paper['id'])
+                        if full_paper and full_paper.get('questions'):
+                            st.markdown("**Question Breakdown:**")
+                            for q in full_paper['questions']:
+                                q_pct = round((q['marks_achieved'] / q['max_marks']) * 100) if q['max_marks'] > 0 else 0
+                                q_color = "#27ae60" if q_pct >= 70 else ("#f39c12" if q_pct >= 50 else "#e74c3c")
+                                topic_text = f" ({q['topic']})" if q['topic'] else ""
+                                st.markdown(f"""
+                                Q{q['question_number']}{topic_text}: **{q['marks_achieved']}/{q['max_marks']}**
+                                <span style="color: {q_color};">({q_pct}%)</span>
+                                """, unsafe_allow_html=True)
+
+                    # Delete button
+                    if st.button("🗑️ Delete Paper", key=f"del_{paper['id']}"):
+                        db.delete_past_paper(paper['id'])
+                        st.success("Paper deleted!")
+                        st.rerun()
+        else:
+            st.info("No papers recorded yet. Go to 'Add Paper' tab to log your first one!")
+
+
+# =============================================================================
 # FOCUS TIMER PAGE
 # =============================================================================
 
@@ -2530,4 +2870,4 @@ Guidelines:
 # =============================================================================
 
 st.markdown("---")
-st.caption("Study Assistant v1.6 | Now with OCR, Notes & Bubble Ace AI! 📷📝🫧📚")
+st.caption("Study Assistant v1.7 | Past Papers, OCR, Notes & Bubble Ace AI! 📄📷📝🫧📚")
