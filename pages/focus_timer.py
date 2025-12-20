@@ -4,7 +4,7 @@ Pomodoro-style focus sessions with logging.
 """
 
 import streamlit as st
-from datetime import datetime, timedelta
+from datetime import datetime
 import database as db
 
 

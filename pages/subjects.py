@@ -82,7 +82,6 @@ def render():
 
             st.markdown("**Choose a colour:**")
             colour_cols = st.columns(8)
-            selected_colour = SUBJECT_COLOURS[0]
 
             for i, colour in enumerate(SUBJECT_COLOURS[:8]):
                 with colour_cols[i]:

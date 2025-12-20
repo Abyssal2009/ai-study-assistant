@@ -541,10 +541,6 @@ def get_study_streak() -> int:
     if not dates:
         return 0
 
-    # Check if today or yesterday is in the list (streak must be current)
-    today = date.today().isoformat()
-    yesterday = date.today().isoformat()  # Simplified - would need proper date calc
-
     streak = 0
     current_date = date.today()
 
@@ -1668,7 +1664,7 @@ def get_study_recommendations(limit: int = 5) -> list:
                 'title': f"Review {row['due_count']} flashcards",
                 'reason': f"{row['due_count']} cards due for review",
                 'priority_score': score,
-                'action': f'Review flashcards to reinforce memory',
+                'action': 'Review flashcards to reinforce memory',
                 'item_id': None,
                 'urgency': 'medium' if row['due_count'] > 10 else 'low'
             })

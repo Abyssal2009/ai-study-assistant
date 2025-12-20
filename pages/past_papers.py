@@ -88,7 +88,7 @@ def render():
 
             if st.form_submit_button("Save Paper", type="primary"):
                 if paper_name and total_marks > 0:
-                    paper_id = db.add_past_paper(
+                    db.add_past_paper(
                         subject_id=subject['id'],
                         paper_name=paper_name,
                         exam_board=exam_board,

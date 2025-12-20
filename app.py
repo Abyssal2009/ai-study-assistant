@@ -6,7 +6,6 @@ Run with: streamlit run app.py
 """
 
 import streamlit as st
-from datetime import date
 import database as db
 from styles import apply_styles
 from pages import (

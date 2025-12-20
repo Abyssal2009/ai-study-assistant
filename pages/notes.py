@@ -4,7 +4,6 @@ Note storage and OCR import.
 """
 
 import streamlit as st
-from datetime import datetime
 import database as db
 
 

@@ -4,7 +4,6 @@ Study analytics and progress tracking.
 """
 
 import streamlit as st
-from datetime import date, timedelta
 import database as db
 
 

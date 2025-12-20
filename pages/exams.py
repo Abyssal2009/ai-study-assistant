@@ -4,7 +4,6 @@ Exam calendar and countdown.
 """
 
 import streamlit as st
-from datetime import date
 import database as db
 from utils import days_until
 
@@ -80,7 +79,7 @@ def render():
                 format_func=lambda x: x['name']
             )
             exam_date = st.date_input("Exam Date *")
-            exam_time = st.time_input("Exam Time (optional)")
+            st.time_input("Exam Time (optional)")  # Displayed but not stored
             duration = st.number_input("Duration (minutes)", min_value=30, max_value=300, value=90)
             location = st.text_input("Location (optional)", placeholder="e.g., Main Hall")
 

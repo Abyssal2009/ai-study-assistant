@@ -3,7 +3,7 @@ Study Assistant - Utility Functions
 Common helper functions used across the application.
 """
 
-from datetime import date, datetime, timedelta
+from datetime import date
 
 
 def days_until(target_date) -> int:
