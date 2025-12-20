@@ -1839,5 +1839,173 @@ def get_subject_priority_scores() -> list:
     return results
 
 
+# =============================================================================
+# ADDITIONAL HELPER FUNCTIONS
+# =============================================================================
+
+def get_completed_homework():
+    """Get all completed homework."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT h.*, s.name as subject_name, s.colour as subject_colour
+        FROM homework h
+        JOIN subjects s ON h.subject_id = s.id
+        WHERE h.completed = 1
+        ORDER BY h.due_date DESC
+    """)
+    rows = cursor.fetchall()
+    conn.close()
+    return rows_to_dicts(rows)
+
+
+def get_focus_streak():
+    """Get the current focus streak (consecutive days with focus sessions)."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT DISTINCT date(created_at) as focus_date
+        FROM focus_sessions
+        ORDER BY focus_date DESC
+    """)
+    dates = [row['focus_date'] for row in cursor.fetchall()]
+    conn.close()
+
+    if not dates:
+        return 0
+
+    streak = 0
+    today = date.today()
+
+    for i, d in enumerate(dates):
+        expected_date = (today - timedelta(days=i)).isoformat()
+        if d == expected_date:
+            streak += 1
+        else:
+            break
+
+    return streak
+
+
+def add_focus_session(subject_id: int, duration_minutes: int, completed: bool = True):
+    """Add a focus session."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO focus_sessions (subject_id, duration_minutes, completed)
+        VALUES (?, ?, ?)
+    """, (subject_id, duration_minutes, 1 if completed else 0))
+    conn.commit()
+    session_id = cursor.lastrowid
+    conn.close()
+    return session_id
+
+
+def get_recent_focus_sessions(limit: int = 10):
+    """Get recent focus sessions."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT f.*, s.name as subject_name
+        FROM focus_sessions f
+        JOIN subjects s ON f.subject_id = s.id
+        ORDER BY f.created_at DESC
+        LIMIT ?
+    """, (limit,))
+    rows = cursor.fetchall()
+    conn.close()
+    return rows_to_dicts(rows)
+
+
+def get_homework_count_by_subject(subject_id: int) -> int:
+    """Get homework count for a subject."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT COUNT(*) as count FROM homework
+        WHERE subject_id = ? AND completed = 0
+    """, (subject_id,))
+    count = cursor.fetchone()['count']
+    conn.close()
+    return count
+
+
+def get_flashcard_count_by_subject(subject_id: int) -> int:
+    """Get flashcard count for a subject."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT COUNT(*) as count FROM flashcards
+        WHERE subject_id = ?
+    """, (subject_id,))
+    count = cursor.fetchone()['count']
+    conn.close()
+    return count
+
+
+def get_focus_minutes_this_week() -> int:
+    """Get total focus minutes for the current week."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    today = date.today()
+    week_start = today - timedelta(days=today.weekday())
+
+    cursor.execute("""
+        SELECT COALESCE(SUM(duration_minutes), 0) as total
+        FROM focus_sessions
+        WHERE date(created_at) >= ?
+    """, (week_start.isoformat(),))
+
+    total = cursor.fetchone()['total']
+    conn.close()
+    return total
+
+
+def get_focus_minutes_by_subject(subject_id: int) -> int:
+    """Get total focus minutes for a subject."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT COALESCE(SUM(duration_minutes), 0) as total
+        FROM focus_sessions
+        WHERE subject_id = ?
+    """, (subject_id,))
+    total = cursor.fetchone()['total']
+    conn.close()
+    return total
+
+
+def clear_completed_homework():
+    """Delete all completed homework."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM homework WHERE completed = 1")
+    conn.commit()
+    conn.close()
+
+
+def reset_flashcard_reviews():
+    """Reset all flashcard review data to initial state."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    today = date.today().isoformat()
+    cursor.execute("""
+        UPDATE flashcards
+        SET next_review = ?,
+            interval_days = 1,
+            ease_factor = 2.5,
+            repetitions = 0
+    """, (today,))
+
+    # Also clear review history
+    cursor.execute("DELETE FROM flashcard_reviews")
+
+    conn.commit()
+    conn.close()
+
+
 # Initialise database when module is imported
 init_database()
