@@ -20,7 +20,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS for better styling
+# Custom CSS for better styling with vibrant colours
 st.markdown("""
 <style>
     /* Main container */
@@ -28,47 +28,95 @@ st.markdown("""
         padding: 1rem;
     }
 
+    /* Sidebar styling */
+    [data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    }
+    [data-testid="stSidebar"] .stRadio label {
+        color: #ffffff !important;
+    }
+    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {
+        color: #e94560 !important;
+    }
+    [data-testid="stSidebar"] p, [data-testid="stSidebar"] span {
+        color: #ffffff !important;
+    }
+
     /* Card-like containers */
     .stExpander {
-        border-radius: 10px;
-        border: 1px solid #e0e0e0;
+        border-radius: 12px;
+        border: 2px solid #e94560;
+        background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
     }
 
     /* Priority badges */
     .priority-high {
-        background-color: #e74c3c;
+        background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
         color: white;
-        padding: 2px 8px;
-        border-radius: 4px;
+        padding: 4px 12px;
+        border-radius: 20px;
         font-size: 12px;
+        font-weight: bold;
+        box-shadow: 0 2px 4px rgba(231, 76, 60, 0.3);
     }
     .priority-medium {
-        background-color: #f39c12;
+        background: linear-gradient(135deg, #f39c12 0%, #d68910 100%);
         color: white;
-        padding: 2px 8px;
-        border-radius: 4px;
+        padding: 4px 12px;
+        border-radius: 20px;
         font-size: 12px;
+        font-weight: bold;
+        box-shadow: 0 2px 4px rgba(243, 156, 18, 0.3);
     }
     .priority-low {
-        background-color: #27ae60;
+        background: linear-gradient(135deg, #27ae60 0%, #1e8449 100%);
         color: white;
-        padding: 2px 8px;
-        border-radius: 4px;
+        padding: 4px 12px;
+        border-radius: 20px;
         font-size: 12px;
+        font-weight: bold;
+        box-shadow: 0 2px 4px rgba(39, 174, 96, 0.3);
     }
 
     /* Overdue styling */
     .overdue {
         color: #e74c3c;
         font-weight: bold;
+        text-shadow: 0 0 10px rgba(231, 76, 60, 0.3);
     }
 
-    /* Stats cards */
+    /* Stats cards with colours */
     .stat-card {
-        background-color: #f8f9fa;
-        padding: 1rem;
-        border-radius: 8px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 1.5rem;
+        border-radius: 12px;
         text-align: center;
+        color: white;
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+    }
+    .stat-card-green {
+        background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+        padding: 1.5rem;
+        border-radius: 12px;
+        text-align: center;
+        color: white;
+        box-shadow: 0 4px 15px rgba(17, 153, 142, 0.3);
+    }
+    .stat-card-orange {
+        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        padding: 1.5rem;
+        border-radius: 12px;
+        text-align: center;
+        color: white;
+        box-shadow: 0 4px 15px rgba(245, 87, 108, 0.3);
+    }
+    .stat-card-blue {
+        background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        padding: 1.5rem;
+        border-radius: 12px;
+        text-align: center;
+        color: white;
+        box-shadow: 0 4px 15px rgba(79, 172, 254, 0.3);
     }
 
     /* Timer display */
@@ -77,6 +125,143 @@ st.markdown("""
         font-weight: bold;
         text-align: center;
         font-family: monospace;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
+
+    /* Subject badge */
+    .subject-badge {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: bold;
+        color: white;
+        margin: 2px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+
+    /* Homework item card */
+    .homework-card {
+        background: white;
+        border-left: 4px solid #667eea;
+        padding: 1rem;
+        margin: 0.5rem 0;
+        border-radius: 0 8px 8px 0;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+
+    /* Exam countdown card */
+    .exam-card {
+        background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+        padding: 1rem;
+        border-radius: 12px;
+        color: white;
+        margin: 0.5rem 0;
+        box-shadow: 0 4px 15px rgba(250, 112, 154, 0.3);
+    }
+
+    /* Flashcard styling */
+    .flashcard {
+        background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+        padding: 2rem;
+        border-radius: 16px;
+        text-align: center;
+        min-height: 200px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+        font-size: 1.2rem;
+    }
+
+    /* Success message */
+    .success-msg {
+        background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+        color: white;
+        padding: 1rem;
+        border-radius: 8px;
+        text-align: center;
+    }
+
+    /* Warning message */
+    .warning-msg {
+        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        color: white;
+        padding: 1rem;
+        border-radius: 8px;
+        text-align: center;
+    }
+
+    /* Page header styling */
+    h1 {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        font-weight: 800 !important;
+    }
+
+    /* Metric styling */
+    [data-testid="stMetricValue"] {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
+
+    /* Button styling */
+    .stButton > button {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        border-radius: 8px;
+        padding: 0.5rem 1rem;
+        font-weight: bold;
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .stButton > button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+
+    /* Progress bar */
+    .stProgress > div > div {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+
+    /* Tabs styling */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        border-radius: 8px;
+        padding: 8px 16px;
+    }
+    .stTabs [aria-selected="true"] {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+        color: white !important;
+    }
+
+    /* Info boxes */
+    .info-box {
+        background: linear-gradient(135deg, #74ebd5 0%, #9face6 100%);
+        padding: 1rem;
+        border-radius: 12px;
+        margin: 1rem 0;
+    }
+
+    /* Streak display */
+    .streak-display {
+        background: linear-gradient(135deg, #f5af19 0%, #f12711 100%);
+        color: white;
+        padding: 0.5rem 1rem;
+        border-radius: 20px;
+        font-weight: bold;
+        display: inline-block;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -235,48 +420,117 @@ if page == "Dashboard":
 
     st.markdown("---")
 
-    # Four columns for key info
+    # Four columns for key stats with coloured cards
     col1, col2, col3, col4 = st.columns(4)
 
     with col1:
-        st.subheader("📋 Due Today")
         due_today = db.get_homework_due_today()
-        if due_today:
-            for hw in due_today:
-                st.markdown(f"- **{hw['subject_name']}**: {hw['title']}")
-        else:
-            st.success("Nothing due today!")
+        due_count = len(due_today)
+        st.markdown(f"""
+        <div class="stat-card-blue">
+            <h1 style="font-size: 2.5rem; margin: 0; color: white !important; -webkit-text-fill-color: white;">{due_count}</h1>
+            <p style="margin: 5px 0 0 0; font-size: 0.9rem;">Due Today</p>
+        </div>
+        """, unsafe_allow_html=True)
 
     with col2:
-        st.subheader("⚠️ Overdue")
         overdue = db.get_overdue_homework()
+        overdue_count = len(overdue)
+        card_class = "stat-card-orange" if overdue_count > 0 else "stat-card-green"
+        st.markdown(f"""
+        <div class="{card_class}">
+            <h1 style="font-size: 2.5rem; margin: 0; color: white !important; -webkit-text-fill-color: white;">{overdue_count}</h1>
+            <p style="margin: 5px 0 0 0; font-size: 0.9rem;">Overdue</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col3:
+        fc_due = db.get_due_flashcards_count()
+        st.markdown(f"""
+        <div class="stat-card">
+            <h1 style="font-size: 2.5rem; margin: 0; color: white !important; -webkit-text-fill-color: white;">{fc_due}</h1>
+            <p style="margin: 5px 0 0 0; font-size: 0.9rem;">Cards to Review</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col4:
+        exams = db.get_exams_this_month()
+        exam_count = len(exams)
+        next_exam_days = days_until(exams[0]['exam_date']) if exams else 0
+        st.markdown(f"""
+        <div class="stat-card-green">
+            <h1 style="font-size: 2.5rem; margin: 0; color: white !important; -webkit-text-fill-color: white;">{exam_count}</h1>
+            <p style="margin: 5px 0 0 0; font-size: 0.9rem;">Exams This Month</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # Detail sections
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown("### 📋 Due Today")
+        if due_today:
+            for hw in due_today:
+                st.markdown(f"""
+                <div class="homework-card" style="border-left-color: {hw['subject_colour']};">
+                    <strong>{hw['title']}</strong><br>
+                    <span class="subject-badge" style="background-color: {hw['subject_colour']};">{hw['subject_name']}</span>
+                </div>
+                """, unsafe_allow_html=True)
+        else:
+            st.markdown("""
+            <div class="success-msg">Nothing due today!</div>
+            """, unsafe_allow_html=True)
+
+        st.markdown("### ⚠️ Overdue")
         if overdue:
             for hw in overdue:
                 days_late = abs(days_until(hw['due_date']))
-                st.markdown(f"- **{hw['subject_name']}**: {hw['title']} ({days_late} days late)")
+                st.markdown(f"""
+                <div class="homework-card" style="border-left-color: #e74c3c;">
+                    <strong class="overdue">{hw['title']}</strong><br>
+                    <span class="subject-badge" style="background-color: {hw['subject_colour']};">{hw['subject_name']}</span>
+                    <span class="priority-high">{days_late} days late</span>
+                </div>
+                """, unsafe_allow_html=True)
         else:
-            st.success("Nothing overdue!")
+            st.markdown("""
+            <div class="success-msg">Nothing overdue!</div>
+            """, unsafe_allow_html=True)
 
-    with col3:
-        st.subheader("🃏 Flashcards Due")
-        fc_due = db.get_due_flashcards_count()
+    with col2:
+        st.markdown("### 🃏 Flashcards Due")
         if fc_due > 0:
-            st.warning(f"**{fc_due} cards** need review!")
+            st.markdown(f"""
+            <div class="warning-msg">
+                <strong>{fc_due} cards</strong> need review!
+            </div>
+            """, unsafe_allow_html=True)
             if st.button("Start Review", key="dash_review"):
-                st.switch_page = "Flashcards"  # Note: This won't work directly, user needs to navigate
                 st.info("Go to Flashcards page to review")
         else:
-            st.success("All caught up!")
+            st.markdown("""
+            <div class="success-msg">All caught up!</div>
+            """, unsafe_allow_html=True)
 
-    with col4:
-        st.subheader("📅 Upcoming Exams")
-        exams = db.get_exams_this_month()
+        st.markdown("### 📅 Upcoming Exams")
         if exams:
-            for exam in exams[:3]:  # Show top 3
+            for exam in exams[:3]:
                 days = days_until(exam['exam_date'])
-                st.markdown(f"- **{exam['subject_name']}**: {exam['name']} ({days} days)")
+                urgency_class = "priority-high" if days <= 7 else ("priority-medium" if days <= 14 else "priority-low")
+                st.markdown(f"""
+                <div class="homework-card" style="border-left-color: {exam['subject_colour']};">
+                    <strong>{exam['name']}</strong><br>
+                    <span class="subject-badge" style="background-color: {exam['subject_colour']};">{exam['subject_name']}</span>
+                    <span class="{urgency_class}">{days} days</span>
+                </div>
+                """, unsafe_allow_html=True)
         else:
-            st.info("No exams in the next 30 days")
+            st.markdown("""
+            <div class="info-box">No exams in the next 30 days</div>
+            """, unsafe_allow_html=True)
 
     st.markdown("---")
 
