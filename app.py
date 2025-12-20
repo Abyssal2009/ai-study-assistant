@@ -351,7 +351,7 @@ with st.sidebar:
 
     page = st.radio(
         "Navigate",
-        ["Dashboard", "Bubble Ace", "What Next?", "Homework", "Exams", "Flashcards", "Focus Timer", "Subjects", "Statistics", "Settings"],
+        ["Dashboard", "Bubble Ace", "What Next?", "Homework", "Exams", "Flashcards", "Notes", "Focus Timer", "Subjects", "Statistics", "Settings"],
         label_visibility="collapsed"
     )
 
@@ -1304,6 +1304,302 @@ elif page == "Flashcards":
 
 
 # =============================================================================
+# NOTES PAGE
+# =============================================================================
+
+elif page == "Notes":
+    st.title("📝 Notes")
+    st.markdown("Store and search your revision notes in one place.")
+
+    # Initialize the database (creates notes table if it doesn't exist)
+    db.init_database()
+
+    subjects = db.get_all_subjects()
+
+    if not subjects:
+        st.warning("Please add subjects first in the Subjects page.")
+        st.stop()
+
+    # Session state for editing
+    if 'editing_note_id' not in st.session_state:
+        st.session_state.editing_note_id = None
+    if 'viewing_note_id' not in st.session_state:
+        st.session_state.viewing_note_id = None
+
+    # Top section: Search and filters
+    col1, col2, col3 = st.columns([3, 2, 1])
+
+    with col1:
+        search_query = st.text_input(
+            "🔍 Search notes",
+            placeholder="Search by title, topic, or content...",
+            label_visibility="collapsed"
+        )
+
+    with col2:
+        filter_subject = st.selectbox(
+            "Filter by subject",
+            options=[{"id": None, "name": "All Subjects"}] + subjects,
+            format_func=lambda x: x['name'],
+            label_visibility="collapsed"
+        )
+
+    with col3:
+        show_favourites = st.checkbox("⭐ Favourites", value=False)
+
+    # Get notes based on filters
+    if search_query:
+        notes = db.search_notes(search_query, filter_subject['id'] if filter_subject['id'] else None)
+    elif show_favourites:
+        notes = db.get_favourite_notes()
+    else:
+        notes = db.get_all_notes(filter_subject['id'] if filter_subject['id'] else None)
+
+    st.markdown("---")
+
+    # Two-column layout: Note list and editor/viewer
+    col_list, col_content = st.columns([1, 2])
+
+    with col_list:
+        st.markdown("### 📚 Your Notes")
+
+        # Add new note button
+        if st.button("➕ New Note", type="primary", use_container_width=True):
+            st.session_state.editing_note_id = "new"
+            st.session_state.viewing_note_id = None
+
+        # Note count
+        total_notes = db.get_notes_count()
+        st.caption(f"{len(notes)} of {total_notes} notes shown")
+
+        # Note list
+        if notes:
+            for note in notes:
+                # Create a card for each note
+                is_selected = (st.session_state.viewing_note_id == note['id'] or
+                              st.session_state.editing_note_id == note['id'])
+
+                card_style = "border-left: 4px solid " + note['subject_colour'] + ";"
+                if is_selected:
+                    card_style += " background: linear-gradient(135deg, #f0f0f0 0%, #e8e8e8 100%);"
+
+                st.markdown(f"""
+                <div style="background: white; {card_style} padding: 10px 15px;
+                            border-radius: 0 8px 8px 0; margin: 8px 0;
+                            box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                    <strong>{note['title']}</strong>
+                    {"⭐" if note['is_favourite'] else ""}<br>
+                    <span class="subject-badge" style="background-color: {note['subject_colour']};">
+                        {note['subject_name']}
+                    </span>
+                    {f"<span style='color: #888; font-size: 0.8rem;'> • {note['topic']}</span>" if note['topic'] else ""}
+                    <br>
+                    <span style="color: #aaa; font-size: 0.75rem;">
+                        Updated: {note['updated_at'][:10] if note['updated_at'] else 'Unknown'}
+                    </span>
+                </div>
+                """, unsafe_allow_html=True)
+
+                # Action buttons for this note
+                btn_col1, btn_col2, btn_col3 = st.columns(3)
+                with btn_col1:
+                    if st.button("👁️", key=f"view_{note['id']}", help="View"):
+                        st.session_state.viewing_note_id = note['id']
+                        st.session_state.editing_note_id = None
+                        st.rerun()
+                with btn_col2:
+                    if st.button("✏️", key=f"edit_{note['id']}", help="Edit"):
+                        st.session_state.editing_note_id = note['id']
+                        st.session_state.viewing_note_id = None
+                        st.rerun()
+                with btn_col3:
+                    if st.button("⭐" if not note['is_favourite'] else "★", key=f"fav_{note['id']}", help="Favourite"):
+                        db.toggle_note_favourite(note['id'])
+                        st.rerun()
+        else:
+            st.info("No notes found. Create your first note!")
+
+    with col_content:
+        # New note form
+        if st.session_state.editing_note_id == "new":
+            st.markdown("### ✨ Create New Note")
+
+            with st.form("new_note_form"):
+                new_title = st.text_input("Title", placeholder="e.g., Photosynthesis Summary")
+
+                col_subj, col_topic = st.columns(2)
+                with col_subj:
+                    new_subject = st.selectbox(
+                        "Subject",
+                        options=subjects,
+                        format_func=lambda x: x['name']
+                    )
+                with col_topic:
+                    new_topic = st.text_input("Topic (optional)", placeholder="e.g., Chapter 3")
+
+                new_content = st.text_area(
+                    "Content",
+                    placeholder="Write your notes here...\n\nYou can use markdown formatting!",
+                    height=400
+                )
+
+                col_save, col_cancel = st.columns(2)
+                with col_save:
+                    if st.form_submit_button("💾 Save Note", type="primary", use_container_width=True):
+                        if new_title and new_content:
+                            db.add_note(
+                                subject_id=new_subject['id'],
+                                title=new_title,
+                                content=new_content,
+                                topic=new_topic if new_topic else None
+                            )
+                            st.success("Note saved!")
+                            st.session_state.editing_note_id = None
+                            st.rerun()
+                        else:
+                            st.error("Please fill in the title and content.")
+                with col_cancel:
+                    if st.form_submit_button("❌ Cancel", use_container_width=True):
+                        st.session_state.editing_note_id = None
+                        st.rerun()
+
+        # Edit existing note
+        elif st.session_state.editing_note_id and st.session_state.editing_note_id != "new":
+            note = db.get_note_by_id(st.session_state.editing_note_id)
+            if note:
+                st.markdown(f"### ✏️ Edit: {note['title']}")
+
+                with st.form("edit_note_form"):
+                    edit_title = st.text_input("Title", value=note['title'])
+
+                    col_subj, col_topic = st.columns(2)
+                    with col_subj:
+                        # Find current subject index
+                        current_idx = 0
+                        for i, s in enumerate(subjects):
+                            if s['id'] == note['subject_id']:
+                                current_idx = i
+                                break
+                        edit_subject = st.selectbox(
+                            "Subject",
+                            options=subjects,
+                            format_func=lambda x: x['name'],
+                            index=current_idx
+                        )
+                    with col_topic:
+                        edit_topic = st.text_input("Topic", value=note['topic'] or "")
+
+                    edit_content = st.text_area(
+                        "Content",
+                        value=note['content'],
+                        height=400
+                    )
+
+                    col_save, col_del, col_cancel = st.columns(3)
+                    with col_save:
+                        if st.form_submit_button("💾 Save Changes", type="primary", use_container_width=True):
+                            db.update_note(
+                                note_id=note['id'],
+                                title=edit_title,
+                                content=edit_content,
+                                topic=edit_topic if edit_topic else None,
+                                subject_id=edit_subject['id']
+                            )
+                            st.success("Note updated!")
+                            st.session_state.editing_note_id = None
+                            st.session_state.viewing_note_id = note['id']
+                            st.rerun()
+                    with col_del:
+                        if st.form_submit_button("🗑️ Delete", use_container_width=True):
+                            db.delete_note(note['id'])
+                            st.success("Note deleted!")
+                            st.session_state.editing_note_id = None
+                            st.session_state.viewing_note_id = None
+                            st.rerun()
+                    with col_cancel:
+                        if st.form_submit_button("❌ Cancel", use_container_width=True):
+                            st.session_state.editing_note_id = None
+                            st.rerun()
+
+        # View note
+        elif st.session_state.viewing_note_id:
+            note = db.get_note_by_id(st.session_state.viewing_note_id)
+            if note:
+                # Note header
+                st.markdown(f"""
+                <div style="background: linear-gradient(135deg, {note['subject_colour']}22, {note['subject_colour']}11);
+                            border-left: 4px solid {note['subject_colour']};
+                            padding: 15px 20px; border-radius: 8px; margin-bottom: 15px;">
+                    <h2 style="margin: 0;">{note['title']} {"⭐" if note['is_favourite'] else ""}</h2>
+                    <span class="subject-badge" style="background-color: {note['subject_colour']};">
+                        {note['subject_name']}
+                    </span>
+                    {f"<span style='color: #666;'> • {note['topic']}</span>" if note['topic'] else ""}
+                    <br>
+                    <span style="color: #888; font-size: 0.8rem;">
+                        Created: {note['created_at'][:10] if note['created_at'] else 'Unknown'} •
+                        Updated: {note['updated_at'][:10] if note['updated_at'] else 'Unknown'}
+                    </span>
+                </div>
+                """, unsafe_allow_html=True)
+
+                # Action buttons
+                btn_col1, btn_col2, btn_col3 = st.columns([1, 1, 3])
+                with btn_col1:
+                    if st.button("✏️ Edit", use_container_width=True):
+                        st.session_state.editing_note_id = note['id']
+                        st.session_state.viewing_note_id = None
+                        st.rerun()
+                with btn_col2:
+                    fav_label = "★ Unfavourite" if note['is_favourite'] else "⭐ Favourite"
+                    if st.button(fav_label, use_container_width=True):
+                        db.toggle_note_favourite(note['id'])
+                        st.rerun()
+
+                st.markdown("---")
+
+                # Note content with markdown rendering
+                st.markdown(note['content'])
+
+                # Quick actions
+                st.markdown("---")
+                st.markdown("**Quick Actions:**")
+                qa_col1, qa_col2 = st.columns(2)
+                with qa_col1:
+                    if st.button("🃏 Create Flashcards from This", use_container_width=True):
+                        st.info("Go to Flashcards page and use Bubble Ace to generate flashcards from these notes!")
+                with qa_col2:
+                    if st.button("📋 Copy to Clipboard", use_container_width=True):
+                        st.code(note['content'], language=None)
+                        st.caption("Select and copy the text above")
+
+        # No note selected
+        else:
+            st.markdown("""
+            <div style="text-align: center; padding: 60px 20px; color: #888;">
+                <h1 style="font-size: 4rem; margin: 0;">📝</h1>
+                <h3>Select a note to view</h3>
+                <p>Or click "New Note" to create one</p>
+            </div>
+            """, unsafe_allow_html=True)
+
+            # Show recent notes
+            recent = db.get_recent_notes(3)
+            if recent:
+                st.markdown("### 🕐 Recently Updated")
+                for note in recent:
+                    st.markdown(f"""
+                    <div class="homework-card" style="border-left-color: {note['subject_colour']};">
+                        <strong>{note['title']}</strong><br>
+                        <span class="subject-badge" style="background-color: {note['subject_colour']};">
+                            {note['subject_name']}
+                        </span>
+                        <span style="color: #888; font-size: 0.8rem;"> • {note['updated_at'][:10] if note['updated_at'] else ''}</span>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+
+# =============================================================================
 # FOCUS TIMER PAGE
 # =============================================================================
 
@@ -2042,4 +2338,4 @@ Guidelines:
 # =============================================================================
 
 st.markdown("---")
-st.caption("Study Assistant v1.4 | Now with Bubble Ace AI Study Buddy! 🫧📚")
+st.caption("Study Assistant v1.5 | Now with Notes & Bubble Ace AI! 📝🫧📚")

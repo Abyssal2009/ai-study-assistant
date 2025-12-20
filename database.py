@@ -133,6 +133,21 @@ def init_database():
         )
     """)
 
+    # Notes table - for storing revision notes
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS notes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            subject_id INTEGER NOT NULL,
+            title TEXT NOT NULL,
+            topic TEXT,
+            content TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            is_favourite INTEGER DEFAULT 0,
+            FOREIGN KEY (subject_id) REFERENCES subjects(id)
+        )
+    """)
+
     conn.commit()
     conn.close()
 
@@ -979,6 +994,202 @@ def get_review_history(days: int = 7) -> list:
     history = cursor.fetchall()
     conn.close()
     return rows_to_dicts(history)
+
+
+# =============================================================================
+# NOTE FUNCTIONS
+# =============================================================================
+
+def add_note(subject_id: int, title: str, content: str, topic: str = None) -> int:
+    """Add a new note. Returns the new note's ID."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """INSERT INTO notes (subject_id, title, topic, content)
+           VALUES (?, ?, ?, ?)""",
+        (subject_id, title, topic, content)
+    )
+    conn.commit()
+    note_id = cursor.lastrowid
+    conn.close()
+    return note_id
+
+
+def get_all_notes(subject_id: int = None) -> list:
+    """Get all notes, optionally filtered by subject."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    if subject_id:
+        cursor.execute("""
+            SELECT n.*, s.name as subject_name, s.colour as subject_colour
+            FROM notes n
+            JOIN subjects s ON n.subject_id = s.id
+            WHERE n.subject_id = ?
+            ORDER BY n.updated_at DESC
+        """, (subject_id,))
+    else:
+        cursor.execute("""
+            SELECT n.*, s.name as subject_name, s.colour as subject_colour
+            FROM notes n
+            JOIN subjects s ON n.subject_id = s.id
+            ORDER BY n.updated_at DESC
+        """)
+
+    notes = cursor.fetchall()
+    conn.close()
+    return rows_to_dicts(notes)
+
+
+def get_note_by_id(note_id: int):
+    """Get a single note by ID."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT n.*, s.name as subject_name, s.colour as subject_colour
+        FROM notes n
+        JOIN subjects s ON n.subject_id = s.id
+        WHERE n.id = ?
+    """, (note_id,))
+    note = cursor.fetchone()
+    conn.close()
+    return row_to_dict(note)
+
+
+def update_note(note_id: int, title: str = None, content: str = None,
+                topic: str = None, subject_id: int = None):
+    """Update an existing note."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    # Build dynamic update query
+    updates = []
+    values = []
+
+    if title is not None:
+        updates.append("title = ?")
+        values.append(title)
+    if content is not None:
+        updates.append("content = ?")
+        values.append(content)
+    if topic is not None:
+        updates.append("topic = ?")
+        values.append(topic)
+    if subject_id is not None:
+        updates.append("subject_id = ?")
+        values.append(subject_id)
+
+    # Always update the updated_at timestamp
+    updates.append("updated_at = CURRENT_TIMESTAMP")
+
+    if updates:
+        query = f"UPDATE notes SET {', '.join(updates)} WHERE id = ?"
+        values.append(note_id)
+        cursor.execute(query, values)
+        conn.commit()
+
+    conn.close()
+
+
+def delete_note(note_id: int):
+    """Delete a note."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM notes WHERE id = ?", (note_id,))
+    conn.commit()
+    conn.close()
+
+
+def toggle_note_favourite(note_id: int):
+    """Toggle the favourite status of a note."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE notes SET is_favourite = NOT is_favourite WHERE id = ?",
+        (note_id,)
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_favourite_notes() -> list:
+    """Get all favourite notes."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT n.*, s.name as subject_name, s.colour as subject_colour
+        FROM notes n
+        JOIN subjects s ON n.subject_id = s.id
+        WHERE n.is_favourite = 1
+        ORDER BY n.updated_at DESC
+    """)
+    notes = cursor.fetchall()
+    conn.close()
+    return rows_to_dicts(notes)
+
+
+def search_notes(query: str, subject_id: int = None) -> list:
+    """Search notes by keyword in title, topic, or content."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    search_term = f"%{query}%"
+
+    if subject_id:
+        cursor.execute("""
+            SELECT n.*, s.name as subject_name, s.colour as subject_colour
+            FROM notes n
+            JOIN subjects s ON n.subject_id = s.id
+            WHERE n.subject_id = ?
+              AND (n.title LIKE ? OR n.topic LIKE ? OR n.content LIKE ?)
+            ORDER BY n.updated_at DESC
+        """, (subject_id, search_term, search_term, search_term))
+    else:
+        cursor.execute("""
+            SELECT n.*, s.name as subject_name, s.colour as subject_colour
+            FROM notes n
+            JOIN subjects s ON n.subject_id = s.id
+            WHERE n.title LIKE ? OR n.topic LIKE ? OR n.content LIKE ?
+            ORDER BY n.updated_at DESC
+        """, (search_term, search_term, search_term))
+
+    notes = cursor.fetchall()
+    conn.close()
+    return rows_to_dicts(notes)
+
+
+def get_notes_count(subject_id: int = None) -> int:
+    """Get count of notes, optionally filtered by subject."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    if subject_id:
+        cursor.execute(
+            "SELECT COUNT(*) as count FROM notes WHERE subject_id = ?",
+            (subject_id,)
+        )
+    else:
+        cursor.execute("SELECT COUNT(*) as count FROM notes")
+
+    result = cursor.fetchone()
+    conn.close()
+    return result['count'] if result else 0
+
+
+def get_recent_notes(limit: int = 5) -> list:
+    """Get most recently updated notes."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT n.*, s.name as subject_name, s.colour as subject_colour
+        FROM notes n
+        JOIN subjects s ON n.subject_id = s.id
+        ORDER BY n.updated_at DESC
+        LIMIT ?
+    """, (limit,))
+    notes = cursor.fetchall()
+    conn.close()
+    return rows_to_dicts(notes)
 
 
 # =============================================================================
