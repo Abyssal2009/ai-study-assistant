@@ -351,7 +351,7 @@ with st.sidebar:
 
     page = st.radio(
         "Navigate",
-        ["Dashboard", "What Next?", "Homework", "Exams", "Flashcards", "Focus Timer", "Subjects", "Statistics", "Settings"],
+        ["Dashboard", "Bubble Ace", "What Next?", "Homework", "Exams", "Flashcards", "Focus Timer", "Subjects", "Statistics", "Settings"],
         label_visibility="collapsed"
     )
 
@@ -1769,8 +1769,277 @@ INCLUDE_STUDY_STATS = True
 
 
 # =============================================================================
+# BUBBLE ACE - AI STUDY BUDDY
+# =============================================================================
+
+elif page == "Bubble Ace":
+    st.title("🫧 Bubble Ace")
+    st.markdown("""
+    <div style="background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+                padding: 20px; border-radius: 16px; margin-bottom: 20px;">
+        <h3 style="margin: 0; color: #333;">Hey there! I'm Bubble Ace, your AI study buddy! 🎓</h3>
+        <p style="margin: 10px 0 0 0; color: #555;">
+            I'm here to help you understand tricky topics, quiz you on what you're learning,
+            and make studying more fun! Just ask me anything about your subjects.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Initialize chat history in session state
+    if 'bubble_ace_messages' not in st.session_state:
+        st.session_state.bubble_ace_messages = []
+
+    if 'bubble_ace_api_key' not in st.session_state:
+        st.session_state.bubble_ace_api_key = ""
+
+    # API Key input
+    with st.expander("🔑 API Key Settings", expanded=not st.session_state.bubble_ace_api_key):
+        st.markdown("""
+        To chat with Bubble Ace, you need a Claude API key from Anthropic.
+
+        **How to get one:**
+        1. Go to [console.anthropic.com](https://console.anthropic.com)
+        2. Sign up or log in
+        3. Go to API Keys and create a new key
+        4. Paste it below
+
+        *Your key is stored only in this session and never saved.*
+        """)
+
+        api_key_input = st.text_input(
+            "Claude API Key",
+            type="password",
+            value=st.session_state.bubble_ace_api_key,
+            placeholder="sk-ant-..."
+        )
+
+        if api_key_input:
+            st.session_state.bubble_ace_api_key = api_key_input
+            st.success("API key set! You can now chat with Bubble Ace.")
+
+    # Quick action buttons
+    st.markdown("### 🚀 Quick Actions")
+    col1, col2, col3, col4 = st.columns(4)
+
+    quick_prompts = {
+        "Explain a Topic": "Can you explain this topic to me in a simple way: ",
+        "Quiz Me": "Give me 5 quiz questions about: ",
+        "Summarise Notes": "Please summarise these notes for me: ",
+        "Essay Help": "Help me structure an essay about: "
+    }
+
+    with col1:
+        if st.button("📖 Explain Topic", use_container_width=True):
+            st.session_state.bubble_ace_quick = "explain"
+    with col2:
+        if st.button("❓ Quiz Me", use_container_width=True):
+            st.session_state.bubble_ace_quick = "quiz"
+    with col3:
+        if st.button("📝 Summarise", use_container_width=True):
+            st.session_state.bubble_ace_quick = "summarise"
+    with col4:
+        if st.button("✍️ Essay Help", use_container_width=True):
+            st.session_state.bubble_ace_quick = "essay"
+
+    # Subject context
+    subjects = db.get_all_subjects()
+    if subjects:
+        selected_subject = st.selectbox(
+            "📚 What subject are you studying?",
+            options=["General"] + [s['name'] for s in subjects],
+            help="This helps Bubble Ace give you more relevant answers"
+        )
+    else:
+        selected_subject = "General"
+
+    st.markdown("---")
+
+    # Chat container with custom styling
+    st.markdown("""
+    <style>
+        .bubble-ace-msg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 20px;
+            border-radius: 20px 20px 5px 20px;
+            margin: 10px 0;
+            max-width: 80%;
+        }
+        .user-msg {
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            color: #333;
+            padding: 15px 20px;
+            border-radius: 20px 20px 20px 5px;
+            margin: 10px 0;
+            margin-left: auto;
+            max-width: 80%;
+            text-align: right;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # Display chat history
+    chat_container = st.container()
+
+    with chat_container:
+        if not st.session_state.bubble_ace_messages:
+            st.markdown("""
+            <div style="text-align: center; padding: 40px; color: #888;">
+                <h2>🫧</h2>
+                <p>Start a conversation! Ask me about any topic you're studying.</p>
+                <p><em>Try: "Explain photosynthesis like I'm 10" or "Quiz me on the Cold War"</em></p>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            for msg in st.session_state.bubble_ace_messages:
+                if msg["role"] == "user":
+                    st.markdown(f"""
+                    <div style="display: flex; justify-content: flex-end;">
+                        <div class="user-msg">
+                            <strong>You:</strong><br>{msg["content"]}
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.markdown(f"""
+                    <div style="display: flex; justify-content: flex-start;">
+                        <div class="bubble-ace-msg">
+                            <strong>🫧 Bubble Ace:</strong><br>{msg["content"]}
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+    # Chat input
+    st.markdown("---")
+
+    # Handle quick action prefixes
+    quick_prefix = ""
+    if 'bubble_ace_quick' in st.session_state:
+        quick_actions = {
+            "explain": "Explain this topic to me in a simple, easy-to-understand way: ",
+            "quiz": "Give me 5 quiz questions (with answers) about: ",
+            "summarise": "Summarise these notes in bullet points: ",
+            "essay": "Help me structure an essay about: "
+        }
+        quick_prefix = quick_actions.get(st.session_state.bubble_ace_quick, "")
+        del st.session_state.bubble_ace_quick
+
+    user_input = st.text_area(
+        "Message Bubble Ace",
+        value=quick_prefix,
+        placeholder="Ask me anything about your studies...",
+        height=100,
+        key="bubble_ace_input"
+    )
+
+    col1, col2 = st.columns([1, 5])
+    with col1:
+        send_button = st.button("🚀 Send", type="primary", use_container_width=True)
+    with col2:
+        if st.button("🗑️ Clear Chat", use_container_width=True):
+            st.session_state.bubble_ace_messages = []
+            st.rerun()
+
+    if send_button and user_input.strip():
+        if not st.session_state.bubble_ace_api_key:
+            st.error("Please enter your Claude API key first!")
+        else:
+            # Add user message to history
+            st.session_state.bubble_ace_messages.append({
+                "role": "user",
+                "content": user_input
+            })
+
+            # Generate response
+            with st.spinner("🫧 Bubble Ace is thinking..."):
+                try:
+                    from anthropic import Anthropic
+
+                    client = Anthropic(api_key=st.session_state.bubble_ace_api_key)
+
+                    # Build system prompt
+                    system_prompt = f"""You are Bubble Ace, a friendly and encouraging AI study buddy for GCSE students.
+
+Your personality:
+- Friendly, supportive, and enthusiastic about learning
+- Use simple language appropriate for 14-16 year olds
+- Add occasional emojis to be friendly but not excessive
+- Be encouraging when students struggle
+- Celebrate when they understand something
+
+The student is currently studying: {selected_subject}
+
+Guidelines:
+- Explain concepts clearly using analogies and examples
+- For quizzes, provide the answer after each question
+- Break down complex topics into manageable chunks
+- If asked about topics outside of typical GCSE subjects, still help but keep it educational
+- Encourage the student to keep studying and praise their effort
+- Keep responses focused and not too long (students have short attention spans!)
+- Use British English spellings (colour, favourite, organise, etc.)"""
+
+                    # Build messages for API
+                    api_messages = []
+                    for msg in st.session_state.bubble_ace_messages:
+                        api_messages.append({
+                            "role": msg["role"],
+                            "content": msg["content"]
+                        })
+
+                    response = client.messages.create(
+                        model="claude-sonnet-4-20250514",
+                        max_tokens=1024,
+                        system=system_prompt,
+                        messages=api_messages
+                    )
+
+                    assistant_message = response.content[0].text
+
+                    # Add assistant response to history
+                    st.session_state.bubble_ace_messages.append({
+                        "role": "assistant",
+                        "content": assistant_message
+                    })
+
+                    st.rerun()
+
+                except Exception as e:
+                    error_msg = str(e)
+                    if "invalid_api_key" in error_msg.lower() or "authentication" in error_msg.lower():
+                        st.error("❌ Invalid API key. Please check your key and try again.")
+                    elif "rate_limit" in error_msg.lower():
+                        st.error("⏳ Rate limit reached. Please wait a moment and try again.")
+                    else:
+                        st.error(f"❌ Error: {error_msg}")
+
+                    # Remove the failed user message
+                    st.session_state.bubble_ace_messages.pop()
+
+    # Tips section
+    with st.expander("💡 Tips for chatting with Bubble Ace"):
+        st.markdown("""
+        **Great questions to ask:**
+        - "Explain [topic] like I'm 10 years old"
+        - "Give me 5 quiz questions about [topic]"
+        - "What are the key points I need to remember about [topic]?"
+        - "Help me understand why [concept] happens"
+        - "What's the difference between [thing 1] and [thing 2]?"
+        - "Can you give me an example of [concept]?"
+        - "How do I answer a 6-mark question about [topic]?"
+        - "Summarise [chapter/topic] in bullet points"
+
+        **Study techniques I can help with:**
+        - Creating mnemonics to remember things
+        - Breaking down essay questions
+        - Explaining mark schemes
+        - Practising exam-style questions
+        - Making connections between topics
+        """)
+
+
+# =============================================================================
 # FOOTER
 # =============================================================================
 
 st.markdown("---")
-st.caption("Study Assistant v1.3 | Now with Smart Study Recommendations! 📚")
+st.caption("Study Assistant v1.4 | Now with Bubble Ace AI Study Buddy! 🫧📚")

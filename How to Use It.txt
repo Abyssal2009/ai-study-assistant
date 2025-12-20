@@ -1,0 +1,13 @@
+ How to Use It
+
+  1. First time: Click "Subjects" in the sidebar, then click "Add All My GCSE Subjects"
+  2. Add homework: Go to "Homework" → "Add New Homework"
+  3. Start studying: Go to "Focus Timer" → Select subject → Start session
+
+  To Run Again Later
+
+  Open a terminal and run:
+  cd C:\Code\ai-study-assistant
+  python -m streamlit run app.py
+
+  The app will open at http://localhost:8501

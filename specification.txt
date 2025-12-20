@@ -1,0 +1,38 @@
+I'm a British secondary school student with no coding or systems architecture experience. I want to design and eventually build an AI-powered study assistant for my own use.
+I've attached two documents: a detailed specification and a reality-check suggesting I start smaller.
+My actual revision problems:
+I struggle with two main things:
+
+Getting distracted easily – I start revising but lose focus, switch to something else, or get pulled away
+Forgetting assigned work – Homework, coursework deadlines, and revision tasks slip my mind
+
+When designing and planning this system, please prioritise features that directly address these problems. I'm less interested in fancy AI features if they don't help me stay focused and remember what I need to do.
+PART ONE: The Vision (Design Only)
+Help me understand what a complete system would look like. Explain the high-level architecture, data flow, and how components connect—but do not write any code. Use British English and UK education terminology. Explain technical terms simply.
+My wishlist includes:
+
+Spaced repetition system
+Exam calendar with deadline tracking
+Note storage with search
+OCR for handwritten notes
+RAG system for semantic search across notes
+Past paper analysis and question prediction
+Knowledge gap identification
+AI tutor integration (Claude API)
+Essay writing feedback
+Exam technique training
+Study skills coaching
+Clean, student-friendly interface
+"What should I study next?" feature
+
+PART TWO: The Reality Check (Build Planning)
+After describing the vision, be brutally honest:
+
+Which features directly solve my two problems (distraction and forgetting)?
+Which features are simple vs. complex to build?
+What's realistic for a beginner working alone on Windows?
+If I could only build THREE features this term, which three?
+What should I learn first?
+What's a realistic sequence from "weekend project" to "full system"?
+
+Please ask me any other questions about my situation before finalising your recommendations.
