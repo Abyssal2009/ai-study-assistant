@@ -1325,6 +1325,198 @@ elif page == "Notes":
         st.session_state.editing_note_id = None
     if 'viewing_note_id' not in st.session_state:
         st.session_state.viewing_note_id = None
+    if 'ocr_extracted_text' not in st.session_state:
+        st.session_state.ocr_extracted_text = ""
+
+    # OCR Import Section
+    with st.expander("📷 Import from Image (OCR)", expanded=False):
+        st.markdown("""
+        Upload an image of handwritten or printed notes to extract the text.
+        Works best with clear, well-lit photos of printed text.
+        """)
+
+        # Check if Tesseract is installed
+        tesseract_available = False
+        try:
+            import pytesseract
+            from PIL import Image
+            # Try to find Tesseract
+            try:
+                pytesseract.get_tesseract_version()
+                tesseract_available = True
+            except:
+                # Try common Windows paths
+                common_paths = [
+                    r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+                    r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
+                    r"C:\Users\{}\AppData\Local\Tesseract-OCR\tesseract.exe".format(
+                        __import__('os').environ.get('USERNAME', '')
+                    ),
+                ]
+                for path in common_paths:
+                    if __import__('os').path.exists(path):
+                        pytesseract.pytesseract.tesseract_cmd = path
+                        tesseract_available = True
+                        break
+        except ImportError:
+            pass
+
+        if not tesseract_available:
+            st.warning("""
+            **Tesseract OCR not found!**
+
+            To use OCR, you need to install Tesseract:
+
+            1. Download from: [github.com/UB-Mannheim/tesseract/wiki](https://github.com/UB-Mannheim/tesseract/wiki)
+            2. Run the installer (choose "Add to PATH" option)
+            3. Restart this app
+
+            *Tesseract is free and open-source.*
+            """)
+        else:
+            st.success("✅ Tesseract OCR is ready!")
+
+            col_upload, col_settings = st.columns([2, 1])
+
+            with col_upload:
+                uploaded_image = st.file_uploader(
+                    "Upload an image",
+                    type=['png', 'jpg', 'jpeg', 'bmp', 'tiff', 'webp'],
+                    help="Supported formats: PNG, JPG, JPEG, BMP, TIFF, WEBP"
+                )
+
+            with col_settings:
+                ocr_language = st.selectbox(
+                    "Language",
+                    options=["eng", "eng+equ"],
+                    format_func=lambda x: "English" if x == "eng" else "English + Equations",
+                    help="Select the language of the text in your image"
+                )
+
+                preprocess = st.checkbox("Enhance image", value=True,
+                    help="Apply preprocessing to improve OCR accuracy")
+
+            if uploaded_image:
+                # Display the uploaded image
+                image = Image.open(uploaded_image)
+                st.image(image, caption="Uploaded Image", use_container_width=True)
+
+                if st.button("🔍 Extract Text", type="primary", use_container_width=True):
+                    with st.spinner("Extracting text... This may take a moment."):
+                        try:
+                            # Preprocessing for better OCR
+                            if preprocess:
+                                # Convert to RGB if necessary
+                                if image.mode != 'RGB':
+                                    image = image.convert('RGB')
+
+                                # Convert to grayscale
+                                import PIL.ImageOps
+                                image = image.convert('L')
+
+                                # Increase contrast
+                                from PIL import ImageEnhance
+                                enhancer = ImageEnhance.Contrast(image)
+                                image = enhancer.enhance(2.0)
+
+                                # Increase sharpness
+                                enhancer = ImageEnhance.Sharpness(image)
+                                image = enhancer.enhance(2.0)
+
+                            # Perform OCR
+                            extracted_text = pytesseract.image_to_string(
+                                image,
+                                lang=ocr_language,
+                                config='--psm 6'  # Assume uniform block of text
+                            )
+
+                            if extracted_text.strip():
+                                st.session_state.ocr_extracted_text = extracted_text.strip()
+                                st.success(f"✅ Extracted {len(extracted_text.split())} words!")
+                            else:
+                                st.warning("No text could be extracted. Try a clearer image.")
+
+                        except Exception as e:
+                            st.error(f"OCR Error: {str(e)}")
+
+            # Show extracted text and create note option
+            if st.session_state.ocr_extracted_text:
+                st.markdown("### Extracted Text")
+                st.text_area(
+                    "Extracted text (you can edit before saving)",
+                    value=st.session_state.ocr_extracted_text,
+                    height=200,
+                    key="ocr_text_display",
+                    disabled=True
+                )
+
+                st.markdown("### Save as Note")
+                with st.form("ocr_save_form"):
+                    ocr_title = st.text_input("Note Title", placeholder="e.g., Biology Class Notes 15/01")
+
+                    ocr_col1, ocr_col2 = st.columns(2)
+                    with ocr_col1:
+                        ocr_subject = st.selectbox(
+                            "Subject",
+                            options=subjects,
+                            format_func=lambda x: x['name'],
+                            key="ocr_subject"
+                        )
+                    with ocr_col2:
+                        ocr_topic = st.text_input("Topic (optional)", placeholder="e.g., Chapter 5")
+
+                    # Editable content
+                    ocr_content = st.text_area(
+                        "Content (edit as needed)",
+                        value=st.session_state.ocr_extracted_text,
+                        height=300,
+                        key="ocr_content_edit"
+                    )
+
+                    col_save, col_clear = st.columns(2)
+                    with col_save:
+                        if st.form_submit_button("💾 Save as Note", type="primary", use_container_width=True):
+                            if ocr_title and ocr_content:
+                                db.add_note(
+                                    subject_id=ocr_subject['id'],
+                                    title=ocr_title,
+                                    content=ocr_content,
+                                    topic=ocr_topic if ocr_topic else None
+                                )
+                                st.success("Note saved from OCR!")
+                                st.session_state.ocr_extracted_text = ""
+                                st.rerun()
+                            else:
+                                st.error("Please fill in the title.")
+                    with col_clear:
+                        if st.form_submit_button("🗑️ Clear", use_container_width=True):
+                            st.session_state.ocr_extracted_text = ""
+                            st.rerun()
+
+        # Tips for better OCR
+        with st.expander("💡 Tips for better OCR results"):
+            st.markdown("""
+            **For best results:**
+            - Use good lighting (natural light works best)
+            - Keep the camera steady and parallel to the paper
+            - Make sure text is in focus and not blurry
+            - Avoid shadows across the text
+            - Crop the image to just the text area
+            - Printed text works much better than handwriting
+
+            **For handwritten notes:**
+            - Write clearly and avoid cursive
+            - Use a thick pen with good contrast
+            - Space out your letters
+            - Handwriting recognition is less accurate - expect to edit the result
+
+            **Troubleshooting:**
+            - If no text is extracted, try disabling "Enhance image"
+            - Very small text may not work well - try zooming in when taking the photo
+            - Coloured paper may cause issues - white paper works best
+            """)
+
+    st.markdown("---")
 
     # Top section: Search and filters
     col1, col2, col3 = st.columns([3, 2, 1])
@@ -2338,4 +2530,4 @@ Guidelines:
 # =============================================================================
 
 st.markdown("---")
-st.caption("Study Assistant v1.5 | Now with Notes & Bubble Ace AI! 📝🫧📚")
+st.caption("Study Assistant v1.6 | Now with OCR, Notes & Bubble Ace AI! 📷📝🫧📚")
