@@ -19,6 +19,18 @@ def get_connection():
     return conn
 
 
+def row_to_dict(row):
+    """Convert a sqlite3.Row to a dictionary (needed for Streamlit compatibility)."""
+    if row is None:
+        return None
+    return dict(row)
+
+
+def rows_to_dicts(rows):
+    """Convert a list of sqlite3.Row objects to dictionaries."""
+    return [dict(row) for row in rows]
+
+
 def init_database():
     """Create all tables if they don't exist."""
     conn = get_connection()
@@ -150,7 +162,7 @@ def get_all_subjects() -> list:
     cursor.execute("SELECT * FROM subjects ORDER BY name")
     subjects = cursor.fetchall()
     conn.close()
-    return subjects
+    return rows_to_dicts(subjects)
 
 
 def get_subject_by_id(subject_id: int):
@@ -160,7 +172,7 @@ def get_subject_by_id(subject_id: int):
     cursor.execute("SELECT * FROM subjects WHERE id = ?", (subject_id,))
     subject = cursor.fetchone()
     conn.close()
-    return subject
+    return row_to_dict(subject)
 
 
 def delete_subject(subject_id: int):
@@ -224,7 +236,7 @@ def get_all_homework(include_completed: bool = False) -> list:
 
     homework = cursor.fetchall()
     conn.close()
-    return homework
+    return rows_to_dicts(homework)
 
 
 def get_homework_due_today() -> list:
@@ -241,7 +253,7 @@ def get_homework_due_today() -> list:
     """, (today,))
     homework = cursor.fetchall()
     conn.close()
-    return homework
+    return rows_to_dicts(homework)
 
 
 def get_homework_due_this_week() -> list:
@@ -260,7 +272,7 @@ def get_homework_due_this_week() -> list:
     """, (today, today))
     homework = cursor.fetchall()
     conn.close()
-    return homework
+    return rows_to_dicts(homework)
 
 
 def get_overdue_homework() -> list:
@@ -277,7 +289,7 @@ def get_overdue_homework() -> list:
     """, (today,))
     homework = cursor.fetchall()
     conn.close()
-    return homework
+    return rows_to_dicts(homework)
 
 
 def mark_homework_complete(homework_id: int):
@@ -347,7 +359,7 @@ def get_all_exams() -> list:
     """, (today,))
     exams = cursor.fetchall()
     conn.close()
-    return exams
+    return rows_to_dicts(exams)
 
 
 def get_exams_this_month() -> list:
@@ -364,7 +376,7 @@ def get_exams_this_month() -> list:
     """, (today, today))
     exams = cursor.fetchall()
     conn.close()
-    return exams
+    return rows_to_dicts(exams)
 
 
 def delete_exam(exam_id: int):
@@ -432,7 +444,7 @@ def get_focus_sessions_today() -> list:
     """, (today,))
     sessions = cursor.fetchall()
     conn.close()
-    return sessions
+    return rows_to_dicts(sessions)
 
 
 def get_total_focus_minutes_today() -> int:
@@ -626,7 +638,7 @@ def get_flashcard_by_id(flashcard_id: int):
     """, (flashcard_id,))
     card = cursor.fetchone()
     conn.close()
-    return card
+    return row_to_dict(card)
 
 
 def get_all_flashcards(subject_id: int = None) -> list:
@@ -652,7 +664,7 @@ def get_all_flashcards(subject_id: int = None) -> list:
 
     cards = cursor.fetchall()
     conn.close()
-    return cards
+    return rows_to_dicts(cards)
 
 
 def get_due_flashcards(subject_id: int = None) -> list:
@@ -680,7 +692,7 @@ def get_due_flashcards(subject_id: int = None) -> list:
 
     cards = cursor.fetchall()
     conn.close()
-    return cards
+    return rows_to_dicts(cards)
 
 
 def get_due_flashcards_count(subject_id: int = None) -> int:
@@ -722,7 +734,7 @@ def get_due_flashcards_by_subject() -> list:
 
     results = cursor.fetchall()
     conn.close()
-    return results
+    return rows_to_dicts(results)
 
 
 def review_flashcard(flashcard_id: int, quality: int, time_taken_seconds: int = None):
@@ -966,7 +978,7 @@ def get_review_history(days: int = 7) -> list:
 
     history = cursor.fetchall()
     conn.close()
-    return history
+    return rows_to_dicts(history)
 
 
 # =============================================================================
