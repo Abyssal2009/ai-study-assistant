@@ -5,7 +5,7 @@ Includes the SM-2 spaced repetition algorithm for optimal flashcard scheduling.
 """
 
 import sqlite3
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from pathlib import Path
 
 # Database file location (same folder as this script)
@@ -766,7 +766,6 @@ def review_flashcard(flashcard_id: int, quality: int, time_taken_seconds: int = 
     )
 
     # Calculate next review date
-    from datetime import timedelta
     next_review = (date.today() + timedelta(days=new_interval)).isoformat()
 
     # Update flashcard
