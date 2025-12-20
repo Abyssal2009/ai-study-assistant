@@ -1,0 +1,4 @@
+# AI Study Assistant - Dependencies
+# Install with: pip install -r requirements.txt
+
+streamlit>=1.28.0

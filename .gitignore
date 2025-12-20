@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+
+# Database (contains user data)
+*.db
+
+# Config (contains email credentials)
+config.py
+
+# Exports
+exports/
+
+# Logs
+*.log
+email_log.txt
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
