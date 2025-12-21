@@ -5,7 +5,7 @@ AI-powered study tools including flashcard generation, quiz creation, and more.
 
 import streamlit as st
 import database as db
-from utils import call_claude
+from utils import call_claude, CLAUDE_MODELS, DEFAULT_MODEL
 
 
 def render():
@@ -13,9 +13,11 @@ def render():
     st.title("🤖 AI Tools")
     st.markdown("Powerful AI-powered study tools to supercharge your revision.")
 
-    # Check for API key
+    # Session state setup
     if 'bubble_ace_api_key' not in st.session_state:
         st.session_state.bubble_ace_api_key = ""
+    if 'ai_model' not in st.session_state:
+        st.session_state.ai_model = DEFAULT_MODEL
 
     # API Key check
     if not st.session_state.bubble_ace_api_key:
@@ -39,6 +41,22 @@ def render():
         st.warning("Please add subjects first in the Subjects page.")
         st.stop()
 
+    # Model selector
+    col1, col2, col3 = st.columns([2, 1, 1])
+    with col1:
+        current_model = CLAUDE_MODELS[st.session_state.ai_model]
+        st.markdown(f"**Model:** {current_model['icon']} {current_model['name']}")
+    with col2:
+        if st.button("⚡ Haiku", type="primary" if st.session_state.ai_model == 'haiku' else "secondary"):
+            st.session_state.ai_model = 'haiku'
+            st.rerun()
+    with col3:
+        if st.button("✨ Sonnet", type="primary" if st.session_state.ai_model == 'sonnet' else "secondary"):
+            st.session_state.ai_model = 'sonnet'
+            st.rerun()
+
+    st.markdown("---")
+
     # Tabs for different AI tools
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "🃏 Generate Flashcards",
@@ -50,7 +68,12 @@ def render():
 
     # Local helper for Claude API
     def _call_claude(prompt: str, system: str = None) -> str:
-        return call_claude(st.session_state.bubble_ace_api_key, prompt, system)
+        return call_claude(
+            st.session_state.bubble_ace_api_key,
+            prompt,
+            system,
+            model=st.session_state.ai_model
+        )
 
     # TAB 1: GENERATE FLASHCARDS
     with tab1:
@@ -183,10 +206,11 @@ def _render_quiz_tab(subjects, call_claude):
         if quiz_topic:
             with st.spinner("Creating your quiz..."):
                 type_instructions = {
-                    "Multiple Choice": "Make all questions multiple choice with 4 options (A, B, C, D). Mark the correct answer.",
-                    "Short Answer": "Make all questions short answer (1-2 sentence answers needed).",
-                    "True/False": "Make all questions True/False. State whether each is True or False.",
-                    "Mixed": "Mix question types: some multiple choice, some short answer, some true/false."
+                    "Multiple Choice": "Make all questions multiple choice with 4 options "
+                                       "(A, B, C, D). Mark the correct answer.",
+                    "Short Answer": "Make all questions short answer (1-2 sentence answers).",
+                    "True/False": "Make all questions True/False. State if each is True/False.",
+                    "Mixed": "Mix question types: multiple choice, short answer, true/false."
                 }
 
                 prompt = f"""Create a {quiz_num} question quiz about "{quiz_topic}" for GCSE {quiz_subject['name']}.

@@ -40,7 +40,9 @@ def get_priority_badge(priority: str) -> str:
         'low': '#27ae60'
     }
     colour = colours.get(priority, '#95a5a6')
-    return f'<span style="background-color: {colour}; color: white; padding: 2px 8px; border-radius: 4px; font-size: 12px;">{priority.upper()}</span>'
+    return (f'<span style="background-color: {colour}; color: white; '
+            f'padding: 2px 8px; border-radius: 4px; font-size: 12px;">'
+            f'{priority.upper()}</span>')
 
 
 def get_urgency_colour(urgency: str) -> str:
@@ -86,16 +88,46 @@ def get_subject_colour(index: int) -> str:
     return colours[index % len(colours)]
 
 
-def call_claude(api_key: str, prompt: str, system: str = None) -> str:
-    """Call the Claude API with a prompt."""
+# Available Claude models
+CLAUDE_MODELS = {
+    'haiku': {
+        'id': 'claude-haiku-4-20250514',
+        'name': 'Haiku (Fast)',
+        'description': 'Faster responses, lower cost',
+        'icon': '⚡'
+    },
+    'sonnet': {
+        'id': 'claude-sonnet-4-20250514',
+        'name': 'Sonnet (Balanced)',
+        'description': 'Better quality, moderate speed',
+        'icon': '✨'
+    }
+}
+
+DEFAULT_MODEL = 'sonnet'
+
+
+def call_claude(api_key: str, prompt: str, system: str = None, model: str = None) -> str:
+    """Call the Claude API with a prompt.
+
+    Args:
+        api_key: Anthropic API key
+        prompt: User message to send
+        system: System prompt (optional)
+        model: Model to use - 'haiku' or 'sonnet' (default: sonnet)
+    """
     try:
         from anthropic import Anthropic
         client = Anthropic(api_key=api_key)
 
+        # Get model ID
+        model_key = model or DEFAULT_MODEL
+        model_id = CLAUDE_MODELS.get(model_key, CLAUDE_MODELS[DEFAULT_MODEL])['id']
+
         messages = [{"role": "user", "content": prompt}]
 
         response = client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model=model_id,
             max_tokens=2048,
             system=system or "You are a helpful study assistant for GCSE students. Use British English spellings.",
             messages=messages

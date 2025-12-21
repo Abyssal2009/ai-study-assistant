@@ -5,7 +5,7 @@ AI chatbot study buddy.
 
 import streamlit as st
 import database as db
-from utils import call_claude
+from utils import call_claude, CLAUDE_MODELS, DEFAULT_MODEL
 
 
 def render():
@@ -13,14 +13,17 @@ def render():
     st.title("🫧 Bubble Ace")
     st.markdown("Your AI study buddy! Ask me anything about your studies.")
 
-    # API Key setup
+    # Session state setup
     if 'bubble_ace_api_key' not in st.session_state:
         st.session_state.bubble_ace_api_key = ""
     if 'chat_history' not in st.session_state:
         st.session_state.chat_history = []
+    if 'ai_model' not in st.session_state:
+        st.session_state.ai_model = DEFAULT_MODEL
 
-    # API Key input
-    with st.expander("🔑 API Key Settings", expanded=not st.session_state.bubble_ace_api_key):
+    # Settings expander
+    with st.expander("⚙️ Settings", expanded=not st.session_state.bubble_ace_api_key):
+        # API Key input
         api_key = st.text_input(
             "Claude API Key",
             value=st.session_state.bubble_ace_api_key,
@@ -30,6 +33,39 @@ def render():
         if api_key != st.session_state.bubble_ace_api_key:
             st.session_state.bubble_ace_api_key = api_key
             st.success("API key saved!")
+
+        # Model selector
+        st.markdown("**AI Model:**")
+        col1, col2 = st.columns(2)
+
+        with col1:
+            haiku = CLAUDE_MODELS['haiku']
+            is_haiku = st.session_state.ai_model == 'haiku'
+            if st.button(
+                f"{haiku['icon']} {haiku['name']}",
+                type="primary" if is_haiku else "secondary",
+                use_container_width=True,
+                key="btn_haiku"
+            ):
+                st.session_state.ai_model = 'haiku'
+                st.rerun()
+            st.caption(haiku['description'])
+
+        with col2:
+            sonnet = CLAUDE_MODELS['sonnet']
+            is_sonnet = st.session_state.ai_model == 'sonnet'
+            if st.button(
+                f"{sonnet['icon']} {sonnet['name']}",
+                type="primary" if is_sonnet else "secondary",
+                use_container_width=True,
+                key="btn_sonnet"
+            ):
+                st.session_state.ai_model = 'sonnet'
+                st.rerun()
+            st.caption(sonnet['description'])
+
+        current_model = CLAUDE_MODELS[st.session_state.ai_model]
+        st.info(f"Using: {current_model['icon']} **{current_model['name']}**")
 
     if not st.session_state.bubble_ace_api_key:
         st.warning("Please enter your Claude API key above to start chatting!")
@@ -95,7 +131,12 @@ def render():
 Use British English. Be helpful, clear, and supportive.
 Keep responses concise but informative. Use examples when helpful."""
 
-            response = call_claude(st.session_state.bubble_ace_api_key, user_input, system)
+            response = call_claude(
+                st.session_state.bubble_ace_api_key,
+                user_input,
+                system,
+                model=st.session_state.ai_model
+            )
             st.session_state.chat_history.append({"role": "assistant", "content": response})
 
         st.rerun()
