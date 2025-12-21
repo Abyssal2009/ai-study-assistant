@@ -36,25 +36,92 @@ COMPONENTS_CSS = """
     .timer-container {
         text-align: center;
         padding: var(--space-8);
+        position: relative;
     }
 
     /* Timer states */
-    .timer-running {
-        animation: pulse 2s infinite;
+    .timer-running .timer-display {
+        animation: timerPulse 2s ease-in-out infinite;
     }
 
-    .timer-paused {
-        opacity: 0.7;
+    .timer-paused .timer-display {
+        opacity: 0.6;
     }
 
-    .timer-finished {
-        color: var(--color-success) !important;
-        -webkit-text-fill-color: var(--color-success) !important;
+    .timer-finished .timer-display {
+        background: linear-gradient(135deg, var(--color-success) 0%, var(--color-success-light) 100%);
+        -webkit-background-clip: text;
+        animation: celebrate 0.5s ease-out;
     }
 
-    @keyframes pulse {
+    .timer-break .timer-display {
+        background: linear-gradient(135deg, var(--color-warning) 0%, #e67e22 100%);
+        -webkit-background-clip: text;
+    }
+
+    @keyframes timerPulse {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.9; transform: scale(1.01); }
+    }
+
+    @keyframes celebrate {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.1); }
+        100% { transform: scale(1); }
+    }
+
+    /* Timer progress ring */
+    .timer-progress {
+        position: relative;
+        width: 200px;
+        height: 200px;
+        margin: 0 auto;
+    }
+
+    .timer-progress-ring {
+        transform: rotate(-90deg);
+    }
+
+    .timer-progress-ring circle {
+        fill: none;
+        stroke-width: 8;
+        stroke-linecap: round;
+        transition: stroke-dashoffset var(--transition-slow);
+    }
+
+    .timer-progress-ring .bg {
+        stroke: var(--color-gray-200);
+    }
+
+    .timer-progress-ring .progress {
+        stroke: var(--color-primary);
+    }
+
+    /* Timer warning state (last 5 minutes) */
+    .timer-warning .timer-progress-ring .progress {
+        stroke: var(--color-warning);
+    }
+
+    .timer-warning .timer-display {
+        background: linear-gradient(135deg, var(--color-warning) 0%, #e67e22 100%);
+        -webkit-background-clip: text;
+    }
+
+    /* Timer critical state (last 1 minute) */
+    .timer-critical .timer-progress-ring .progress {
+        stroke: var(--color-error);
+        animation: criticalPulse 0.5s ease-in-out infinite;
+    }
+
+    .timer-critical .timer-display {
+        background: linear-gradient(135deg, var(--color-error) 0%, #c0392b 100%);
+        -webkit-background-clip: text;
+        animation: criticalPulse 0.5s ease-in-out infinite;
+    }
+
+    @keyframes criticalPulse {
         0%, 100% { opacity: 1; }
-        50% { opacity: 0.8; }
+        50% { opacity: 0.6; }
     }
 
     /* =========================================
@@ -103,6 +170,7 @@ COMPONENTS_CSS = """
     /* Flashcard flip animation */
     .flashcard-container {
         perspective: 1000px;
+        cursor: pointer;
     }
 
     .flashcard-inner {
@@ -112,6 +180,50 @@ COMPONENTS_CSS = """
 
     .flashcard-container.flipped .flashcard-inner {
         transform: rotateY(180deg);
+    }
+
+    /* Flashcard difficulty states */
+    .flashcard.difficulty-easy {
+        border: 3px solid var(--color-success);
+    }
+
+    .flashcard.difficulty-medium {
+        border: 3px solid var(--color-warning);
+    }
+
+    .flashcard.difficulty-hard {
+        border: 3px solid var(--color-error);
+    }
+
+    /* Flashcard review states */
+    .flashcard.correct {
+        animation: correctPulse 0.5s ease-out;
+        border: 3px solid var(--color-success);
+    }
+
+    .flashcard.incorrect {
+        animation: shake 0.5s ease-out;
+        border: 3px solid var(--color-error);
+    }
+
+    @keyframes correctPulse {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.05); box-shadow: 0 0 30px rgba(17, 153, 142, 0.5); }
+        100% { transform: scale(1); }
+    }
+
+    /* Flashcard hint reveal */
+    .flashcard-hint {
+        font-size: var(--text-sm);
+        color: var(--color-gray-500);
+        font-style: italic;
+        margin-top: var(--space-4);
+        opacity: 0;
+        transition: opacity var(--transition-normal);
+    }
+
+    .flashcard:hover .flashcard-hint {
+        opacity: 1;
     }
 
     /* =========================================

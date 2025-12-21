@@ -6,16 +6,17 @@ This package provides a modular CSS system for the Streamlit application.
 Styles are organized into logical modules for maintainability.
 
 Modules:
-    _variables   - Design tokens (colors, fonts, spacing, etc.)
-    _typography  - Headings, body text, links
-    _layout      - Containers, spacing, alignment
-    _navigation  - Sidebar and navigation
-    _cards       - Stat cards, item cards
-    _badges      - Tags, badges, status indicators
-    _interactive - Buttons, tabs, expanders
-    _components  - Timer, flashcards, chat, etc.
-    _forms       - Inputs, selects, textareas
-    _utilities   - Helper classes, responsive
+    _variables    - Design tokens (colors, fonts, spacing, etc.)
+    _typography   - Headings, body text, links
+    _layout       - Containers, spacing, alignment
+    _navigation   - Sidebar and navigation
+    _cards        - Stat cards, item cards
+    _badges       - Tags, badges, status indicators
+    _interactive  - Buttons, tabs, expanders
+    _components   - Timer, flashcards, chat, etc.
+    _forms        - Inputs, selects, textareas
+    _interactions - Hover, focus, animations, states
+    _utilities    - Helper classes, responsive
 
 Usage:
     from styles import CUSTOM_CSS, apply_styles
@@ -36,6 +37,7 @@ from ._badges import BADGES_CSS
 from ._interactive import INTERACTIVE_CSS
 from ._components import COMPONENTS_CSS
 from ._forms import FORMS_CSS
+from ._interactions import INTERACTIONS_CSS
 from ._utilities import UTILITIES_CSS
 
 
@@ -51,6 +53,7 @@ CUSTOM_CSS = f"""
 {INTERACTIVE_CSS}
 {COMPONENTS_CSS}
 {FORMS_CSS}
+{INTERACTIONS_CSS}
 {UTILITIES_CSS}
 </style>
 """
@@ -95,6 +98,7 @@ def get_module_css(module_name: str) -> str:
         'interactive': INTERACTIVE_CSS,
         'components': COMPONENTS_CSS,
         'forms': FORMS_CSS,
+        'interactions': INTERACTIONS_CSS,
         'utilities': UTILITIES_CSS,
     }
 
@@ -134,5 +138,6 @@ __all__ = [
     'INTERACTIVE_CSS',
     'COMPONENTS_CSS',
     'FORMS_CSS',
+    'INTERACTIONS_CSS',
     'UTILITIES_CSS',
 ]

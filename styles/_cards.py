@@ -109,11 +109,42 @@ CARDS_CSS = """
         border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
         box-shadow: var(--shadow-sm);
         transition: all var(--transition-normal);
+        position: relative;
     }
 
     .homework-card:hover {
         box-shadow: var(--shadow-lg);
         transform: translateX(4px);
+    }
+
+    /* Homework card contextual states */
+    .homework-card.overdue {
+        border-left-color: var(--color-error);
+        background: linear-gradient(90deg, rgba(231, 76, 60, 0.05) 0%, white 20%);
+    }
+
+    .homework-card.due-today {
+        border-left-color: var(--color-accent);
+        background: linear-gradient(90deg, rgba(233, 69, 96, 0.05) 0%, white 20%);
+    }
+
+    .homework-card.due-soon {
+        border-left-color: var(--color-warning);
+        background: linear-gradient(90deg, rgba(243, 156, 18, 0.05) 0%, white 20%);
+    }
+
+    .homework-card.completed {
+        opacity: 0.7;
+        border-left-color: var(--color-success);
+    }
+
+    .homework-card.completed::after {
+        content: '✓';
+        position: absolute;
+        top: var(--space-2);
+        right: var(--space-3);
+        color: var(--color-success);
+        font-size: var(--text-lg);
     }
 
     /* Homework card title */
@@ -135,6 +166,8 @@ CARDS_CSS = """
         margin: var(--space-4) 0;
         box-shadow: 0 4px 20px rgba(250, 112, 154, 0.25);
         transition: transform var(--transition-normal);
+        position: relative;
+        overflow: hidden;
     }
 
     .exam-card:hover {
@@ -145,6 +178,29 @@ CARDS_CSS = """
     .exam-card strong {
         color: white !important;
         -webkit-text-fill-color: white !important;
+    }
+
+    /* Exam card contextual states */
+    .exam-card.exam-soon {
+        animation: pulse 2s ease-in-out infinite;
+    }
+
+    .exam-card.exam-imminent::before {
+        content: '⚠️ SOON';
+        position: absolute;
+        top: var(--space-2);
+        right: var(--space-3);
+        background: rgba(255, 255, 255, 0.9);
+        color: var(--color-error);
+        padding: var(--space-1) var(--space-3);
+        border-radius: var(--radius-full);
+        font-size: var(--text-xs);
+        font-weight: var(--font-bold);
+    }
+
+    .exam-card.exam-completed {
+        opacity: 0.7;
+        filter: grayscale(0.3);
     }
 
     /* Note card */
