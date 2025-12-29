@@ -29,3 +29,21 @@ email_log.txt
 # OS
 .DS_Store
 Thumbs.db
+
+# Backup files (keep directories, ignore content)
+data/backups/*.zip
+data/backups/*.json
+
+# Cloud credentials
+*credentials*.json
+*token*.json
+google_token.json
+onedrive_token.json
+
+# Note images (user data - keep directory structure)
+data/images/notes/*.png
+data/images/notes/*.jpg
+data/images/notes/*.jpeg
+!data/images/notes/.gitkeep
+!data/backups/.gitkeep
+google_credentials.json
