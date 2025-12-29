@@ -255,6 +255,95 @@ def init_database():
         )
     """)
 
+    # Knowledge assessments - assessment sessions for gap analysis
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS knowledge_assessments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            subject_id INTEGER NOT NULL,
+            assessment_type TEXT NOT NULL,
+            total_questions INTEGER NOT NULL,
+            questions_answered INTEGER DEFAULT 0,
+            correct_answers INTEGER DEFAULT 0,
+            score_percentage REAL,
+            time_taken_seconds INTEGER,
+            status TEXT DEFAULT 'in_progress',
+            started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            completed_at TIMESTAMP,
+            ai_feedback TEXT,
+            FOREIGN KEY (subject_id) REFERENCES subjects(id)
+        )
+    """)
+
+    # Assessment questions - individual questions within an assessment
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS assessment_questions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            assessment_id INTEGER NOT NULL,
+            question_text TEXT NOT NULL,
+            question_type TEXT NOT NULL,
+            options TEXT,
+            correct_answer TEXT NOT NULL,
+            topic TEXT NOT NULL,
+            difficulty TEXT DEFAULT 'medium',
+            source_type TEXT,
+            source_id INTEGER,
+            marks INTEGER DEFAULT 1,
+            FOREIGN KEY (assessment_id) REFERENCES knowledge_assessments(id)
+        )
+    """)
+
+    # Assessment responses - student answers with evaluation
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS assessment_responses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            assessment_id INTEGER NOT NULL,
+            question_id INTEGER NOT NULL,
+            student_answer TEXT,
+            is_correct INTEGER,
+            marks_awarded INTEGER DEFAULT 0,
+            time_taken_seconds INTEGER,
+            confidence_level INTEGER,
+            ai_evaluation TEXT,
+            responded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (assessment_id) REFERENCES knowledge_assessments(id),
+            FOREIGN KEY (question_id) REFERENCES assessment_questions(id)
+        )
+    """)
+
+    # Topic mastery - tracks mastery levels per topic over time
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS topic_mastery (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            subject_id INTEGER NOT NULL,
+            topic TEXT NOT NULL,
+            mastery_level REAL DEFAULT 0,
+            total_attempts INTEGER DEFAULT 0,
+            correct_attempts INTEGER DEFAULT 0,
+            last_assessed_at TIMESTAMP,
+            trend TEXT DEFAULT 'stable',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (subject_id) REFERENCES subjects(id),
+            UNIQUE(subject_id, topic)
+        )
+    """)
+
+    # Exam requirements - topics required by exams (from past papers)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS exam_requirements (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            subject_id INTEGER NOT NULL,
+            topic TEXT NOT NULL,
+            frequency INTEGER DEFAULT 1,
+            typical_marks INTEGER,
+            importance_level TEXT DEFAULT 'medium',
+            last_appeared_year TEXT,
+            notes TEXT,
+            FOREIGN KEY (subject_id) REFERENCES subjects(id),
+            UNIQUE(subject_id, topic)
+        )
+    """)
+
     conn.commit()
     conn.close()
 
@@ -2391,6 +2480,649 @@ def reset_flashcard_reviews():
 
     conn.commit()
     conn.close()
+
+
+# =============================================================================
+# KNOWLEDGE GAP ASSESSMENT FUNCTIONS
+# =============================================================================
+
+def create_assessment(subject_id: int, assessment_type: str, total_questions: int) -> int:
+    """Create a new knowledge assessment session. Returns assessment ID."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO knowledge_assessments (subject_id, assessment_type, total_questions)
+        VALUES (?, ?, ?)
+    """, (subject_id, assessment_type, total_questions))
+    conn.commit()
+    assessment_id = cursor.lastrowid
+    conn.close()
+    return assessment_id
+
+
+def add_assessment_question(assessment_id: int, question_text: str, question_type: str,
+                            correct_answer: str, topic: str, options: str = None,
+                            difficulty: str = 'medium', source_type: str = None,
+                            source_id: int = None, marks: int = 1) -> int:
+    """Add a question to an assessment. Returns question ID."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO assessment_questions
+        (assessment_id, question_text, question_type, correct_answer, topic,
+         options, difficulty, source_type, source_id, marks)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (assessment_id, question_text, question_type, correct_answer, topic,
+          options, difficulty, source_type, source_id, marks))
+    conn.commit()
+    question_id = cursor.lastrowid
+    conn.close()
+    return question_id
+
+
+def record_response(assessment_id: int, question_id: int, student_answer: str,
+                    is_correct: bool, marks_awarded: int = 0, time_taken: int = None,
+                    confidence: int = None, ai_evaluation: str = None) -> int:
+    """Record a student's response to an assessment question."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO assessment_responses
+        (assessment_id, question_id, student_answer, is_correct, marks_awarded,
+         time_taken_seconds, confidence_level, ai_evaluation)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """, (assessment_id, question_id, student_answer, 1 if is_correct else 0,
+          marks_awarded, time_taken, confidence, ai_evaluation))
+    conn.commit()
+    response_id = cursor.lastrowid
+
+    # Update assessment progress
+    cursor.execute("""
+        UPDATE knowledge_assessments
+        SET questions_answered = questions_answered + 1,
+            correct_answers = correct_answers + ?
+        WHERE id = ?
+    """, (1 if is_correct else 0, assessment_id))
+    conn.commit()
+    conn.close()
+    return response_id
+
+
+def complete_assessment(assessment_id: int, ai_feedback: str = None):
+    """Mark an assessment as completed and calculate final score."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    # Get assessment data
+    cursor.execute("""
+        SELECT total_questions, correct_answers, started_at
+        FROM knowledge_assessments WHERE id = ?
+    """, (assessment_id,))
+    assessment = cursor.fetchone()
+
+    if assessment:
+        score_pct = (assessment['correct_answers'] / assessment['total_questions'] * 100
+                     if assessment['total_questions'] > 0 else 0)
+
+        # Calculate time taken
+        started = datetime.fromisoformat(assessment['started_at'])
+        time_taken = int((datetime.now() - started).total_seconds())
+
+        cursor.execute("""
+            UPDATE knowledge_assessments
+            SET status = 'completed',
+                score_percentage = ?,
+                time_taken_seconds = ?,
+                completed_at = CURRENT_TIMESTAMP,
+                ai_feedback = ?
+            WHERE id = ?
+        """, (score_pct, time_taken, ai_feedback, assessment_id))
+        conn.commit()
+
+    conn.close()
+
+
+def get_assessment_by_id(assessment_id: int) -> dict:
+    """Get full assessment details."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT ka.*, s.name as subject_name
+        FROM knowledge_assessments ka
+        JOIN subjects s ON ka.subject_id = s.id
+        WHERE ka.id = ?
+    """, (assessment_id,))
+    assessment = cursor.fetchone()
+    conn.close()
+    return row_to_dict(assessment)
+
+
+def get_assessments_by_subject(subject_id: int = None, limit: int = 20) -> list:
+    """Get recent assessments, optionally filtered by subject."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    if subject_id:
+        cursor.execute("""
+            SELECT ka.*, s.name as subject_name
+            FROM knowledge_assessments ka
+            JOIN subjects s ON ka.subject_id = s.id
+            WHERE ka.subject_id = ?
+            ORDER BY ka.started_at DESC
+            LIMIT ?
+        """, (subject_id, limit))
+    else:
+        cursor.execute("""
+            SELECT ka.*, s.name as subject_name
+            FROM knowledge_assessments ka
+            JOIN subjects s ON ka.subject_id = s.id
+            ORDER BY ka.started_at DESC
+            LIMIT ?
+        """, (limit,))
+    assessments = cursor.fetchall()
+    conn.close()
+    return rows_to_dicts(assessments)
+
+
+def get_assessment_questions(assessment_id: int) -> list:
+    """Get all questions for an assessment."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT * FROM assessment_questions
+        WHERE assessment_id = ?
+        ORDER BY id
+    """, (assessment_id,))
+    questions = cursor.fetchall()
+    conn.close()
+    return rows_to_dicts(questions)
+
+
+def get_unanswered_questions(assessment_id: int) -> list:
+    """Get questions not yet answered in an assessment."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT aq.* FROM assessment_questions aq
+        LEFT JOIN assessment_responses ar ON aq.id = ar.question_id
+        WHERE aq.assessment_id = ? AND ar.id IS NULL
+        ORDER BY aq.id
+    """, (assessment_id,))
+    questions = cursor.fetchall()
+    conn.close()
+    return rows_to_dicts(questions)
+
+
+def get_assessment_responses(assessment_id: int) -> list:
+    """Get all responses for an assessment."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT ar.*, aq.question_text, aq.correct_answer, aq.topic
+        FROM assessment_responses ar
+        JOIN assessment_questions aq ON ar.question_id = aq.id
+        WHERE ar.assessment_id = ?
+        ORDER BY ar.responded_at
+    """, (assessment_id,))
+    responses = cursor.fetchall()
+    conn.close()
+    return rows_to_dicts(responses)
+
+
+# =============================================================================
+# TOPIC MASTERY FUNCTIONS
+# =============================================================================
+
+def update_topic_mastery(subject_id: int, topic: str, is_correct: bool):
+    """Update mastery level for a topic after an assessment question."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    # Check if topic exists
+    cursor.execute("""
+        SELECT * FROM topic_mastery
+        WHERE subject_id = ? AND topic = ?
+    """, (subject_id, topic))
+    existing = cursor.fetchone()
+
+    if existing:
+        # Update existing
+        new_total = existing['total_attempts'] + 1
+        new_correct = existing['correct_attempts'] + (1 if is_correct else 0)
+        new_mastery = (new_correct / new_total) * 100
+
+        # Calculate trend (compare with previous)
+        old_mastery = existing['mastery_level']
+        if new_mastery > old_mastery + 5:
+            trend = 'improving'
+        elif new_mastery < old_mastery - 5:
+            trend = 'declining'
+        else:
+            trend = 'stable'
+
+        cursor.execute("""
+            UPDATE topic_mastery
+            SET total_attempts = ?,
+                correct_attempts = ?,
+                mastery_level = ?,
+                trend = ?,
+                last_assessed_at = CURRENT_TIMESTAMP,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE subject_id = ? AND topic = ?
+        """, (new_total, new_correct, new_mastery, trend, subject_id, topic))
+    else:
+        # Insert new
+        mastery = 100 if is_correct else 0
+        cursor.execute("""
+            INSERT INTO topic_mastery
+            (subject_id, topic, mastery_level, total_attempts, correct_attempts, last_assessed_at)
+            VALUES (?, ?, ?, 1, ?, CURRENT_TIMESTAMP)
+        """, (subject_id, topic, mastery, 1 if is_correct else 0))
+
+    conn.commit()
+    conn.close()
+
+
+def get_topic_mastery(subject_id: int = None) -> list:
+    """Get mastery levels for all topics, optionally filtered by subject."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    if subject_id:
+        cursor.execute("""
+            SELECT tm.*, s.name as subject_name
+            FROM topic_mastery tm
+            JOIN subjects s ON tm.subject_id = s.id
+            WHERE tm.subject_id = ?
+            ORDER BY tm.mastery_level ASC
+        """, (subject_id,))
+    else:
+        cursor.execute("""
+            SELECT tm.*, s.name as subject_name
+            FROM topic_mastery tm
+            JOIN subjects s ON tm.subject_id = s.id
+            ORDER BY tm.mastery_level ASC
+        """)
+    mastery = cursor.fetchall()
+    conn.close()
+    return rows_to_dicts(mastery)
+
+
+def get_weak_topics_from_mastery(subject_id: int = None, threshold: float = 60.0, limit: int = 10) -> list:
+    """Get topics below mastery threshold (weak areas)."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    if subject_id:
+        cursor.execute("""
+            SELECT tm.*, s.name as subject_name
+            FROM topic_mastery tm
+            JOIN subjects s ON tm.subject_id = s.id
+            WHERE tm.subject_id = ? AND tm.mastery_level < ?
+            ORDER BY tm.mastery_level ASC
+            LIMIT ?
+        """, (subject_id, threshold, limit))
+    else:
+        cursor.execute("""
+            SELECT tm.*, s.name as subject_name
+            FROM topic_mastery tm
+            JOIN subjects s ON tm.subject_id = s.id
+            WHERE tm.mastery_level < ?
+            ORDER BY tm.mastery_level ASC
+            LIMIT ?
+        """, (threshold, limit))
+    topics = cursor.fetchall()
+    conn.close()
+    return rows_to_dicts(topics)
+
+
+def get_strong_topics(subject_id: int = None, threshold: float = 80.0, limit: int = 10) -> list:
+    """Get topics above mastery threshold (strengths)."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    if subject_id:
+        cursor.execute("""
+            SELECT tm.*, s.name as subject_name
+            FROM topic_mastery tm
+            JOIN subjects s ON tm.subject_id = s.id
+            WHERE tm.subject_id = ? AND tm.mastery_level >= ?
+            ORDER BY tm.mastery_level DESC
+            LIMIT ?
+        """, (subject_id, threshold, limit))
+    else:
+        cursor.execute("""
+            SELECT tm.*, s.name as subject_name
+            FROM topic_mastery tm
+            JOIN subjects s ON tm.subject_id = s.id
+            WHERE tm.mastery_level >= ?
+            ORDER BY tm.mastery_level DESC
+            LIMIT ?
+        """, (threshold, limit))
+    topics = cursor.fetchall()
+    conn.close()
+    return rows_to_dicts(topics)
+
+
+# =============================================================================
+# GAP ANALYSIS FUNCTIONS
+# =============================================================================
+
+def sync_exam_requirements_from_papers(subject_id: int = None):
+    """Sync exam requirements table from paper_questions data."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    # Get topic frequencies from past papers
+    if subject_id:
+        cursor.execute("""
+            SELECT pp.subject_id, pq.topic, COUNT(*) as frequency,
+                   AVG(pq.max_marks) as avg_marks, MAX(pp.year) as last_year
+            FROM paper_questions pq
+            JOIN past_papers pp ON pq.paper_id = pp.id
+            WHERE pp.subject_id = ? AND pq.topic IS NOT NULL AND pq.topic != ''
+            GROUP BY pp.subject_id, pq.topic
+        """, (subject_id,))
+    else:
+        cursor.execute("""
+            SELECT pp.subject_id, pq.topic, COUNT(*) as frequency,
+                   AVG(pq.max_marks) as avg_marks, MAX(pp.year) as last_year
+            FROM paper_questions pq
+            JOIN past_papers pp ON pq.paper_id = pp.id
+            WHERE pq.topic IS NOT NULL AND pq.topic != ''
+            GROUP BY pp.subject_id, pq.topic
+        """)
+
+    topics = cursor.fetchall()
+
+    for topic_data in topics:
+        # Determine importance based on frequency
+        freq = topic_data['frequency']
+        if freq >= 5:
+            importance = 'critical'
+        elif freq >= 3:
+            importance = 'high'
+        elif freq >= 2:
+            importance = 'medium'
+        else:
+            importance = 'low'
+
+        # Upsert into exam_requirements
+        cursor.execute("""
+            INSERT INTO exam_requirements (subject_id, topic, frequency, typical_marks, importance_level, last_appeared_year)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(subject_id, topic) DO UPDATE SET
+                frequency = excluded.frequency,
+                typical_marks = excluded.typical_marks,
+                importance_level = excluded.importance_level,
+                last_appeared_year = excluded.last_appeared_year
+        """, (topic_data['subject_id'], topic_data['topic'], freq,
+              int(topic_data['avg_marks']) if topic_data['avg_marks'] else None,
+              importance, topic_data['last_year']))
+
+    conn.commit()
+    conn.close()
+
+
+def get_exam_requirements(subject_id: int = None) -> list:
+    """Get exam topic requirements."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    if subject_id:
+        cursor.execute("""
+            SELECT er.*, s.name as subject_name
+            FROM exam_requirements er
+            JOIN subjects s ON er.subject_id = s.id
+            WHERE er.subject_id = ?
+            ORDER BY er.frequency DESC
+        """, (subject_id,))
+    else:
+        cursor.execute("""
+            SELECT er.*, s.name as subject_name
+            FROM exam_requirements er
+            JOIN subjects s ON er.subject_id = s.id
+            ORDER BY er.frequency DESC
+        """)
+    requirements = cursor.fetchall()
+    conn.close()
+    return rows_to_dicts(requirements)
+
+
+def get_knowledge_gaps(subject_id: int = None) -> list:
+    """
+    Compare topic_mastery against exam_requirements to identify gaps.
+    Returns topics required by exam but not mastered by student.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    if subject_id:
+        cursor.execute("""
+            SELECT er.topic, er.frequency, er.importance_level, er.subject_id,
+                   COALESCE(tm.mastery_level, 0) as mastery_level,
+                   COALESCE(tm.total_attempts, 0) as attempts,
+                   s.name as subject_name
+            FROM exam_requirements er
+            JOIN subjects s ON er.subject_id = s.id
+            LEFT JOIN topic_mastery tm ON er.subject_id = tm.subject_id AND er.topic = tm.topic
+            WHERE er.subject_id = ?
+              AND (tm.mastery_level IS NULL OR tm.mastery_level < 70)
+            ORDER BY er.frequency DESC, COALESCE(tm.mastery_level, 0) ASC
+        """, (subject_id,))
+    else:
+        cursor.execute("""
+            SELECT er.topic, er.frequency, er.importance_level, er.subject_id,
+                   COALESCE(tm.mastery_level, 0) as mastery_level,
+                   COALESCE(tm.total_attempts, 0) as attempts,
+                   s.name as subject_name
+            FROM exam_requirements er
+            JOIN subjects s ON er.subject_id = s.id
+            LEFT JOIN topic_mastery tm ON er.subject_id = tm.subject_id AND er.topic = tm.topic
+            WHERE tm.mastery_level IS NULL OR tm.mastery_level < 70
+            ORDER BY er.frequency DESC, COALESCE(tm.mastery_level, 0) ASC
+        """)
+
+    gaps = cursor.fetchall()
+    conn.close()
+    return rows_to_dicts(gaps)
+
+
+def get_coverage_stats(subject_id: int = None) -> dict:
+    """Calculate coverage statistics."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    # Total exam topics
+    if subject_id:
+        cursor.execute("SELECT COUNT(*) as count FROM exam_requirements WHERE subject_id = ?", (subject_id,))
+    else:
+        cursor.execute("SELECT COUNT(*) as count FROM exam_requirements")
+    total_exam_topics = cursor.fetchone()['count']
+
+    # Topics assessed (have mastery record)
+    if subject_id:
+        cursor.execute("""
+            SELECT COUNT(DISTINCT tm.topic) as count
+            FROM topic_mastery tm
+            JOIN exam_requirements er ON tm.subject_id = er.subject_id AND tm.topic = er.topic
+            WHERE tm.subject_id = ?
+        """, (subject_id,))
+    else:
+        cursor.execute("""
+            SELECT COUNT(DISTINCT tm.topic) as count
+            FROM topic_mastery tm
+            JOIN exam_requirements er ON tm.subject_id = er.subject_id AND tm.topic = er.topic
+        """)
+    topics_assessed = cursor.fetchone()['count']
+
+    # Topics mastered (>= 70%)
+    if subject_id:
+        cursor.execute("""
+            SELECT COUNT(*) as count
+            FROM topic_mastery tm
+            JOIN exam_requirements er ON tm.subject_id = er.subject_id AND tm.topic = er.topic
+            WHERE tm.subject_id = ? AND tm.mastery_level >= 70
+        """, (subject_id,))
+    else:
+        cursor.execute("""
+            SELECT COUNT(*) as count
+            FROM topic_mastery tm
+            JOIN exam_requirements er ON tm.subject_id = er.subject_id AND tm.topic = er.topic
+            WHERE tm.mastery_level >= 70
+        """)
+    topics_mastered = cursor.fetchone()['count']
+
+    conn.close()
+
+    coverage_pct = (topics_mastered / total_exam_topics * 100) if total_exam_topics > 0 else 0
+
+    return {
+        'total_exam_topics': total_exam_topics,
+        'topics_assessed': topics_assessed,
+        'topics_mastered': topics_mastered,
+        'coverage_percentage': coverage_pct
+    }
+
+
+# =============================================================================
+# ASSESSMENT ANALYTICS FUNCTIONS
+# =============================================================================
+
+def get_assessment_stats(subject_id: int = None, days: int = 30) -> dict:
+    """Get aggregate assessment statistics."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cutoff = (datetime.now() - timedelta(days=days)).isoformat()
+
+    if subject_id:
+        cursor.execute("""
+            SELECT COUNT(*) as total_assessments,
+                   SUM(questions_answered) as total_questions,
+                   AVG(score_percentage) as avg_score,
+                   SUM(correct_answers) as total_correct,
+                   SUM(questions_answered) as total_answered
+            FROM knowledge_assessments
+            WHERE subject_id = ? AND status = 'completed' AND started_at >= ?
+        """, (subject_id, cutoff))
+    else:
+        cursor.execute("""
+            SELECT COUNT(*) as total_assessments,
+                   SUM(questions_answered) as total_questions,
+                   AVG(score_percentage) as avg_score,
+                   SUM(correct_answers) as total_correct,
+                   SUM(questions_answered) as total_answered
+            FROM knowledge_assessments
+            WHERE status = 'completed' AND started_at >= ?
+        """, (cutoff,))
+
+    stats = cursor.fetchone()
+    conn.close()
+
+    total_answered = stats['total_answered'] or 0
+    total_correct = stats['total_correct'] or 0
+    accuracy = (total_correct / total_answered * 100) if total_answered > 0 else 0
+
+    return {
+        'total_assessments': stats['total_assessments'] or 0,
+        'total_questions': stats['total_questions'] or 0,
+        'avg_score': stats['avg_score'] or 0,
+        'accuracy': accuracy
+    }
+
+
+def get_assessment_progress_over_time(subject_id: int = None, limit: int = 20) -> list:
+    """Get assessment scores over time to show progress."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    if subject_id:
+        cursor.execute("""
+            SELECT id, score_percentage, started_at, assessment_type, subject_id
+            FROM knowledge_assessments
+            WHERE subject_id = ? AND status = 'completed'
+            ORDER BY started_at DESC
+            LIMIT ?
+        """, (subject_id, limit))
+    else:
+        cursor.execute("""
+            SELECT id, score_percentage, started_at, assessment_type, subject_id
+            FROM knowledge_assessments
+            WHERE status = 'completed'
+            ORDER BY started_at DESC
+            LIMIT ?
+        """, (limit,))
+
+    progress = cursor.fetchall()
+    conn.close()
+    return rows_to_dicts(progress)
+
+
+def get_performance_by_question_type(subject_id: int = None) -> list:
+    """Get performance by question type."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    if subject_id:
+        cursor.execute("""
+            SELECT aq.question_type,
+                   COUNT(*) as total,
+                   SUM(ar.is_correct) as correct
+            FROM assessment_responses ar
+            JOIN assessment_questions aq ON ar.question_id = aq.id
+            JOIN knowledge_assessments ka ON ar.assessment_id = ka.id
+            WHERE ka.subject_id = ?
+            GROUP BY aq.question_type
+        """, (subject_id,))
+    else:
+        cursor.execute("""
+            SELECT aq.question_type,
+                   COUNT(*) as total,
+                   SUM(ar.is_correct) as correct
+            FROM assessment_responses ar
+            JOIN assessment_questions aq ON ar.question_id = aq.id
+            GROUP BY aq.question_type
+        """)
+
+    results = cursor.fetchall()
+    conn.close()
+
+    performance = []
+    for r in results:
+        pct = (r['correct'] / r['total'] * 100) if r['total'] > 0 else 0
+        performance.append({
+            'question_type': r['question_type'],
+            'total': r['total'],
+            'correct': r['correct'],
+            'percentage': pct
+        })
+
+    return performance
+
+
+def get_available_topics_for_subject(subject_id: int) -> list:
+    """Get available topics for assessment from past papers and flashcards."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    # Get topics from past papers
+    cursor.execute("""
+        SELECT DISTINCT pq.topic
+        FROM paper_questions pq
+        JOIN past_papers pp ON pq.paper_id = pp.id
+        WHERE pp.subject_id = ? AND pq.topic IS NOT NULL AND pq.topic != ''
+    """, (subject_id,))
+    paper_topics = [r['topic'] for r in cursor.fetchall()]
+
+    # Get topics from flashcards
+    cursor.execute("""
+        SELECT DISTINCT topic
+        FROM flashcards
+        WHERE subject_id = ? AND topic IS NOT NULL AND topic != ''
+    """, (subject_id,))
+    flashcard_topics = [r['topic'] for r in cursor.fetchall()]
+
+    conn.close()
+
+    # Combine and deduplicate
+    all_topics = list(set(paper_topics + flashcard_topics))
+    return sorted(all_topics)
 
 
 # Initialise database when module is imported

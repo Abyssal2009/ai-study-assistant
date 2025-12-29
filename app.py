@@ -11,7 +11,8 @@ from styles import apply_styles
 from pages import (
     dashboard, ai_tools, bubble_ace, what_next,
     homework, exams, flashcards, notes,
-    past_papers, focus_timer, subjects, statistics, settings
+    past_papers, focus_timer, subjects, statistics, settings,
+    knowledge_gaps
 )
 
 
@@ -60,6 +61,14 @@ if 'bubble_ace_api_key' not in st.session_state:
 if 'chat_history' not in st.session_state:
     st.session_state.chat_history = []
 
+# Knowledge Gap Assessment state
+if 'current_assessment' not in st.session_state:
+    st.session_state.current_assessment = None
+if 'assessment_index' not in st.session_state:
+    st.session_state.assessment_index = 0
+if 'assessment_start_time' not in st.session_state:
+    st.session_state.assessment_start_time = None
+
 
 # =============================================================================
 # SIDEBAR - NAVIGATION
@@ -75,6 +84,7 @@ with st.sidebar:
             "Dashboard",
             "Bubble Ace",
             "AI Tools",
+            "Knowledge Gaps",
             "What Next?",
             "Homework",
             "Exams",
@@ -113,6 +123,7 @@ PAGE_MODULES = {
     "Dashboard": dashboard,
     "Bubble Ace": bubble_ace,
     "AI Tools": ai_tools,
+    "Knowledge Gaps": knowledge_gaps,
     "What Next?": what_next,
     "Homework": homework,
     "Exams": exams,
@@ -135,4 +146,4 @@ if page in PAGE_MODULES:
 # =============================================================================
 
 st.markdown("---")
-st.caption("Study Assistant v1.8 | AI Tools, Past Papers, OCR, Notes & Bubble Ace! 🤖📄📷📝🫧")
+st.caption("Study Assistant v2.0 | Knowledge Gaps, AI Tools, Past Papers, OCR, Notes & Bubble Ace! 🎯🤖📄📷📝🫧")
