@@ -405,8 +405,8 @@ def _render_all_papers_tab(subjects):
                         summary = json.loads(paper['ai_summary'])
                         if summary.get('key_topics'):
                             st.markdown(f"**Key Topics:** {', '.join(summary['key_topics'][:5])}")
-                    except:
-                        pass
+                    except json.JSONDecodeError:
+                        pass  # Invalid JSON in stored summary
 
                 if paper.get('notes'):
                     st.markdown(f"**Notes:** {paper['notes']}")
@@ -498,8 +498,8 @@ Respond in JSON format:
             end = result.rfind('}') + 1
             if start >= 0 and end > start:
                 return json.loads(result[start:end])
-        except:
-            pass
+        except json.JSONDecodeError:
+            pass  # Invalid JSON from AI response
 
         return None
     except Exception as e:

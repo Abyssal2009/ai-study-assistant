@@ -81,7 +81,7 @@ def init_database():
     # Migration: Add google_calendar_id column if it doesn't exist
     try:
         cursor.execute("ALTER TABLE exams ADD COLUMN google_calendar_id TEXT")
-    except:
+    except sqlite3.OperationalError:
         pass  # Column already exists
 
     # Focus sessions table - tracks study time
@@ -200,12 +200,12 @@ def init_database():
     # Migration: Add new columns to past_papers if they don't exist
     try:
         cursor.execute("ALTER TABLE past_papers ADD COLUMN raw_content TEXT")
-    except:
-        pass
+    except sqlite3.OperationalError:
+        pass  # Column already exists
     try:
         cursor.execute("ALTER TABLE past_papers ADD COLUMN ai_summary TEXT")
-    except:
-        pass
+    except sqlite3.OperationalError:
+        pass  # Column already exists
 
     # Past paper questions - individual question scores with analysis
     cursor.execute("""
@@ -228,20 +228,20 @@ def init_database():
     # Migration: Add new columns to paper_questions if they don't exist
     try:
         cursor.execute("ALTER TABLE paper_questions ADD COLUMN question_text TEXT")
-    except:
-        pass
+    except sqlite3.OperationalError:
+        pass  # Column already exists
     try:
         cursor.execute("ALTER TABLE paper_questions ADD COLUMN question_type TEXT")
-    except:
-        pass
+    except sqlite3.OperationalError:
+        pass  # Column already exists
     try:
         cursor.execute("ALTER TABLE paper_questions ADD COLUMN difficulty TEXT")
-    except:
-        pass
+    except sqlite3.OperationalError:
+        pass  # Column already exists
     try:
         cursor.execute("ALTER TABLE paper_questions ADD COLUMN ai_analysis TEXT")
-    except:
-        pass
+    except sqlite3.OperationalError:
+        pass  # Column already exists
 
     # Paper analysis reports - cross-paper pattern analysis
     cursor.execute("""

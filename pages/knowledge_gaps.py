@@ -484,10 +484,13 @@ def _create_and_populate_assessment(subject_id, assessment_type, question_source
 
     # Generate questions using AI
     questions_generated = 0
-    topics_cycle = topics * ((num_questions // len(topics)) + 1) if topics else [subject_name]
+    if topics and len(topics) > 0:
+        topics_cycle = topics * ((num_questions // len(topics)) + 1)
+    else:
+        topics_cycle = [subject_name] * num_questions
 
     for i in range(num_questions):
-        topic = topics_cycle[i % len(topics_cycle)] if topics_cycle else subject_name
+        topic = topics_cycle[i] if i < len(topics_cycle) else subject_name
 
         question = _generate_question_for_topic(topic, subject_name, api_key)
 
@@ -547,8 +550,10 @@ Make the question test understanding, not just memorization."""
             if start >= 0 and end > start:
                 return json.loads(result[start:end])
 
-    except Exception as e:
-        pass
+    except json.JSONDecodeError:
+        pass  # Invalid JSON from AI response
+    except Exception:
+        pass  # Other errors (API, network, etc.)
 
     return None
 
@@ -626,8 +631,10 @@ Be fair - award marks for substantially correct answers even if wording differs 
                 parsed = json.loads(result[start:end])
                 return parsed.get('is_correct', False), parsed.get('explanation', '')
 
-    except:
-        pass
+    except json.JSONDecodeError:
+        pass  # Invalid JSON from AI response
+    except Exception:
+        pass  # Other errors (API, network, etc.)
 
     # Default to incorrect if AI fails
     return False, None

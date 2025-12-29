@@ -33,8 +33,8 @@ def save_uploaded_image(uploaded_file, note_id: int) -> dict:
         from PIL import Image
         img = Image.open(file_path)
         width, height = img.size
-    except:
-        width, height = None, None
+    except (IOError, OSError):
+        width, height = None, None  # Could not read image dimensions
 
     return {
         'filename': filename,
@@ -131,8 +131,8 @@ def render():
                                     try:
                                         if os.path.exists(img['file_path']):
                                             os.remove(img['file_path'])
-                                    except:
-                                        pass
+                                    except OSError:
+                                        pass  # File deletion failed, continue anyway
                                 db.delete_note(note['id'])
                                 del st.session_state.selected_note_id
                                 st.rerun()

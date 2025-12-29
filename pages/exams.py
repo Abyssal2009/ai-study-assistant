@@ -86,7 +86,7 @@ def render():
             from cloud.google_calendar import get_client
             calendar_client = get_client()
             calendar_connected = calendar_client.is_authenticated()
-        except:
+        except (ImportError, Exception):
             calendar_connected = False
 
         with st.form("add_exam"):
@@ -200,7 +200,7 @@ def _delete_exam_with_calendar(exam_id: int):
             client = get_client()
             if client.is_authenticated():
                 client.delete_from_calendar(calendar_id)
-        except:
+        except (ImportError, Exception):
             pass  # Calendar deletion is best-effort
 
 
