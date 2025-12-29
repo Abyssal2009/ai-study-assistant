@@ -799,11 +799,16 @@ def get_homework_stats() -> dict:
     """, (today,))
     overdue = cursor.fetchone()['count']
 
+    # Total completed
+    cursor.execute("SELECT COUNT(*) as count FROM homework WHERE completed = 1")
+    completed_total = cursor.fetchone()['count']
+
     conn.close()
 
     return {
         'pending': pending,
         'completed_this_week': completed_week,
+        'completed_total': completed_total,
         'overdue': overdue
     }
 
@@ -2340,7 +2345,7 @@ def get_focus_streak():
     cursor = conn.cursor()
 
     cursor.execute("""
-        SELECT DISTINCT date(created_at) as focus_date
+        SELECT DISTINCT date(started_at) as focus_date
         FROM focus_sessions
         ORDER BY focus_date DESC
     """)
@@ -2368,8 +2373,8 @@ def add_focus_session(subject_id: int, duration_minutes: int, completed: bool = 
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("""
-        INSERT INTO focus_sessions (subject_id, duration_minutes, completed)
-        VALUES (?, ?, ?)
+        INSERT INTO focus_sessions (subject_id, started_at, actual_minutes, completed)
+        VALUES (?, datetime('now'), ?, ?)
     """, (subject_id, duration_minutes, 1 if completed else 0))
     conn.commit()
     session_id = cursor.lastrowid
@@ -2385,7 +2390,7 @@ def get_recent_focus_sessions(limit: int = 10):
         SELECT f.*, s.name as subject_name
         FROM focus_sessions f
         JOIN subjects s ON f.subject_id = s.id
-        ORDER BY f.created_at DESC
+        ORDER BY f.started_at DESC
         LIMIT ?
     """, (limit,))
     rows = cursor.fetchall()
@@ -2428,9 +2433,9 @@ def get_focus_minutes_this_week() -> int:
     week_start = today - timedelta(days=today.weekday())
 
     cursor.execute("""
-        SELECT COALESCE(SUM(duration_minutes), 0) as total
+        SELECT COALESCE(SUM(actual_minutes), 0) as total
         FROM focus_sessions
-        WHERE date(created_at) >= ?
+        WHERE date(started_at) >= ?
     """, (week_start.isoformat(),))
 
     total = cursor.fetchone()['total']
@@ -2443,7 +2448,7 @@ def get_focus_minutes_by_subject(subject_id: int) -> int:
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT COALESCE(SUM(duration_minutes), 0) as total
+        SELECT COALESCE(SUM(actual_minutes), 0) as total
         FROM focus_sessions
         WHERE subject_id = ?
     """, (subject_id,))
