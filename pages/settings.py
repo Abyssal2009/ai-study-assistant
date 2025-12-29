@@ -11,7 +11,9 @@ def render():
     """Render the Settings page."""
     st.title("⚙️ Settings")
 
-    tab1, tab2, tab3 = st.tabs(["🔑 API Keys", "📧 Email Reminders", "🗄️ Data"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        "🔑 API Keys", "📧 Email Reminders", "🗄️ Data", "☁️ Backup & Sync", "🔍 Search"
+    ])
 
     # TAB 1: API Keys
     with tab1:
@@ -80,8 +82,8 @@ def render():
             subjects = db.get_all_subjects()
             st.metric("Subjects", len(subjects))
 
-            hw_stats = db.get_homework_stats()
-            st.metric("Homework Items", hw_stats['pending'] + hw_stats['completed_total'])
+            all_homework = db.get_all_homework(include_completed=True)
+            st.metric("Homework Items", len(all_homework) if all_homework else 0)
 
             notes_count = db.get_notes_count()
             st.metric("Notes", notes_count)
@@ -128,7 +130,7 @@ def render():
         st.markdown("---")
         st.markdown("#### About")
         st.markdown("""
-        **Study Assistant v1.8**
+        **Study Assistant v1.9**
 
         A personal study tool built for GCSE students.
 
@@ -137,9 +139,234 @@ def render():
         - Exam calendar
         - Flashcards with spaced repetition (SM-2)
         - Focus timer
-        - Notes with OCR import
+        - Notes with OCR import + image storage
         - Past paper analysis
         - AI study tools powered by Claude
+        - Semantic search (RAG)
+        - Cloud backup (OneDrive / Google Drive)
 
         Built with Streamlit + Python + SQLite
         """)
+
+    # TAB 4: Backup & Sync
+    with tab4:
+        st.markdown("### Backup & Sync")
+
+        import backup
+        from cloud import CloudService, get_available_services
+
+        # Cloud service selection
+        st.markdown("#### Cloud Service")
+
+        if 'cloud_service' not in st.session_state:
+            st.session_state.cloud_service = CloudService.NONE.value
+
+        services = get_available_services()
+        selected_service = st.selectbox(
+            "Select cloud backup service:",
+            options=[s['id'] for s in services],
+            format_func=lambda x: next((s['name'] for s in services if s['id'] == x), x),
+            key="cloud_service_select"
+        )
+
+        if selected_service != st.session_state.cloud_service:
+            st.session_state.cloud_service = selected_service
+
+        # Cloud connection status and auth
+        if selected_service == CloudService.GOOGLE_DRIVE.value:
+            st.markdown("---")
+            st.markdown("#### Google Drive Connection")
+            _render_google_drive_section()
+
+        # Local backup section
+        st.markdown("---")
+        st.markdown("#### Local Backups")
+
+        col1, col2 = st.columns(2)
+        with col1:
+            backup_name = st.text_input("Backup name (optional):", placeholder="my_backup")
+        with col2:
+            st.write("")  # Spacer
+            st.write("")
+            if st.button("📦 Create Backup Now", type="primary"):
+                with st.spinner("Creating backup..."):
+                    success, msg, path = backup.create_backup(backup_name if backup_name else None)
+                    if success:
+                        st.success(msg)
+                        # Upload to cloud if connected
+                        if selected_service != CloudService.NONE.value and path:
+                            _upload_to_cloud(selected_service, path)
+                    else:
+                        st.error(msg)
+
+        # List local backups
+        local_backups = backup.list_local_backups()
+        if local_backups:
+            st.markdown("##### Available Local Backups")
+            for bkp in local_backups[:5]:  # Show last 5
+                with st.expander(f"📁 {bkp['filename']} ({bkp['size_mb']:.2f} MB)"):
+                    st.caption(f"Created: {bkp.get('created_at', 'Unknown')}")
+                    if bkp.get('counts'):
+                        counts = bkp['counts']
+                        st.caption(
+                            f"Contains: {counts.get('notes', 0)} notes, "
+                            f"{counts.get('flashcards', 0)} flashcards, "
+                            f"{counts.get('note_images', 0)} images"
+                        )
+
+                    bcol1, bcol2, bcol3 = st.columns(3)
+                    with bcol1:
+                        if st.button("🔄 Restore", key=f"restore_{bkp['filename']}"):
+                            st.session_state.pending_restore = bkp['path']
+                    with bcol2:
+                        if st.button("☁️ Upload", key=f"upload_{bkp['filename']}"):
+                            if selected_service != CloudService.NONE.value:
+                                _upload_to_cloud(selected_service, bkp['path'])
+                            else:
+                                st.warning("Select a cloud service first")
+                    with bcol3:
+                        if st.button("🗑️ Delete", key=f"delete_{bkp['filename']}"):
+                            success, msg = backup.delete_backup(bkp['path'])
+                            if success:
+                                st.success(msg)
+                                st.rerun()
+                            else:
+                                st.error(msg)
+
+            # Cleanup old backups
+            if len(local_backups) > 5:
+                if st.button("🧹 Cleanup Old Backups (keep 5)"):
+                    deleted, msg = backup.cleanup_old_backups(5)
+                    st.info(msg)
+                    st.rerun()
+        else:
+            st.info("No local backups yet. Create one using the button above.")
+
+        # Restore confirmation
+        if 'pending_restore' in st.session_state:
+            st.markdown("---")
+            st.warning("⚠️ Restore will replace all current data. A safety backup will be created first.")
+            rcol1, rcol2 = st.columns(2)
+            with rcol1:
+                if st.button("✅ Confirm Restore", type="primary"):
+                    with st.spinner("Restoring backup..."):
+                        success, msg = backup.restore_backup(st.session_state.pending_restore)
+                        if success:
+                            st.success(msg)
+                            del st.session_state.pending_restore
+                            st.rerun()
+                        else:
+                            st.error(msg)
+            with rcol2:
+                if st.button("❌ Cancel"):
+                    del st.session_state.pending_restore
+                    st.rerun()
+
+    # TAB 5: Search (RAG Status)
+    with tab5:
+        st.markdown("### Search & Indexing")
+
+        try:
+            import rag
+            stats = rag.get_index_stats()
+
+            st.markdown("#### Semantic Search Status")
+
+            semantic = stats.get('semantic_status', {})
+            if semantic.get('available'):
+                st.success("✅ Semantic search is available")
+                st.caption(f"Model: {semantic.get('model_name', 'Unknown')}")
+                st.caption(f"Model loaded: {'Yes' if semantic.get('model_loaded') else 'Not yet'}")
+            else:
+                st.warning("⚠️ Semantic search unavailable (keyword search only)")
+                if semantic.get('error'):
+                    st.caption(f"Error: {semantic['error']}")
+                st.info("Install sentence-transformers for semantic search: `pip install sentence-transformers`")
+
+            st.markdown("#### Index Statistics")
+
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("Indexed Documents", stats.get('total_documents', 0))
+                st.metric("Notes", stats.get('notes_count', 0))
+            with col2:
+                st.metric("Flashcards", stats.get('flashcards_count', 0))
+                st.metric("Note Images", stats.get('note_images_count', 0))
+
+            st.markdown("---")
+
+            if st.button("🔄 Rebuild Search Index", type="primary"):
+                with st.spinner("Rebuilding index... This may take a moment."):
+                    rag.index_all_content()
+                    st.success("Search index rebuilt!")
+                    st.rerun()
+
+        except ImportError:
+            st.error("RAG module not available")
+        except Exception as e:
+            st.error(f"Error loading search status: {e}")
+
+
+def _render_google_drive_section():
+    """Render Google Drive connection UI."""
+    from cloud.google_drive import get_client
+
+    client = get_client()
+
+    if client.is_authenticated():
+        success, msg, user_info = client.get_user_info()
+        if success and user_info:
+            st.success(f"✅ Connected as {user_info.get('name', 'Unknown')} ({user_info.get('email', '')})")
+
+        if st.button("Disconnect Google Drive"):
+            client.disconnect()
+            st.rerun()
+
+        # List cloud backups
+        success, msg, cloud_backups = client.list_backups()
+        if success and cloud_backups:
+            st.markdown("##### Cloud Backups")
+            for cb in cloud_backups[:5]:
+                st.caption(f"☁️ {cb['name']} ({cb['size_mb']:.2f} MB)")
+    else:
+        st.info("Not connected to Google Drive")
+
+        if not client.has_credentials_file():
+            st.warning("""
+            **Google credentials file not found.**
+
+            To set up Google Drive:
+            1. Go to [Google Cloud Console](https://console.cloud.google.com)
+            2. Create a project and enable Drive API
+            3. Create OAuth 2.0 credentials (Desktop app)
+            4. Download the credentials JSON file
+            5. Save it as `google_credentials.json` in the app folder
+            """)
+        else:
+            if st.button("🔗 Connect Google Drive"):
+                success, msg, _ = client.start_auth_flow()
+                if success:
+                    st.success(msg)
+                    st.rerun()
+                else:
+                    st.error(msg)
+
+
+def _upload_to_cloud(service: str, local_path: str):
+    """Upload a backup to Google Drive."""
+    from cloud import CloudService
+    from cloud.google_drive import get_client
+
+    if service != CloudService.GOOGLE_DRIVE.value:
+        return
+
+    with st.spinner("Uploading to Google Drive..."):
+        client = get_client()
+        if client.is_authenticated():
+            success, msg = client.upload_backup(local_path)
+            if success:
+                st.success(f"☁️ {msg}")
+            else:
+                st.error(msg)
+        else:
+            st.warning("Connect to Google Drive first")
