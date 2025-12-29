@@ -88,14 +88,14 @@ UTILITIES_CSS = """
        BORDERS
        ========================================= */
 
-    .border { border: 1px solid var(--color-gray-200) !important; }
-    .border-2 { border: 2px solid var(--color-gray-200) !important; }
+    .border { border: 1px solid var(--border-color) !important; }
+    .border-2 { border: 2px solid var(--border-color) !important; }
     .border-none { border: none !important; }
 
-    .border-t { border-top: 1px solid var(--color-gray-200) !important; }
-    .border-b { border-bottom: 1px solid var(--color-gray-200) !important; }
-    .border-l { border-left: 1px solid var(--color-gray-200) !important; }
-    .border-r { border-right: 1px solid var(--color-gray-200) !important; }
+    .border-t { border-top: 1px solid var(--border-color) !important; }
+    .border-b { border-bottom: 1px solid var(--border-color) !important; }
+    .border-l { border-left: 1px solid var(--border-color) !important; }
+    .border-r { border-right: 1px solid var(--border-color) !important; }
 
     .border-primary { border-color: var(--color-primary) !important; }
     .border-accent { border-color: var(--color-accent) !important; }
@@ -119,9 +119,10 @@ UTILITIES_CSS = """
        BACKGROUNDS
        ========================================= */
 
-    .bg-white { background: white !important; }
-    .bg-gray-50 { background: var(--color-gray-50) !important; }
-    .bg-gray-100 { background: var(--color-gray-100) !important; }
+    .bg-white { background: var(--surface-primary) !important; }
+    .bg-surface { background: var(--surface-primary) !important; }
+    .bg-surface-secondary { background: var(--surface-secondary) !important; }
+    .bg-surface-tertiary { background: var(--surface-tertiary) !important; }
     .bg-primary { background: var(--color-primary) !important; }
     .bg-accent { background: var(--color-accent) !important; }
     .bg-transparent { background: transparent !important; }

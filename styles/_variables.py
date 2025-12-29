@@ -46,6 +46,22 @@ VARIABLES_CSS = """
         --color-dark-accent: #0f3460;
 
         /* ===================
+           SEMANTIC TEXT COLORS
+           =================== */
+
+        /* These change based on light/dark mode */
+        --text-primary: #111827;          /* Main text - near black */
+        --text-secondary: #374151;        /* Secondary text - dark gray */
+        --text-tertiary: #6b7280;         /* Muted text - medium gray */
+        --text-inverse: #ffffff;          /* Text on dark backgrounds */
+
+        /* Surface colors */
+        --surface-primary: #ffffff;
+        --surface-secondary: #f9fafb;
+        --surface-tertiary: #f3f4f6;
+        --border-color: #e5e7eb;
+
+        /* ===================
            TYPOGRAPHY
            =================== */
 
@@ -183,5 +199,54 @@ VARIABLES_CSS = """
 
     .gradient-ocean {
         background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+    }
+
+    /* =========================================
+       DARK MODE OVERRIDES
+       ========================================= */
+
+    /* Streamlit dark theme detection */
+    [data-theme="dark"],
+    .stApp[data-theme="dark"],
+    [data-testid="stAppViewContainer"][data-theme="dark"] {
+        --text-primary: #f9fafb;          /* Main text - near white */
+        --text-secondary: #e5e7eb;        /* Secondary text - light gray */
+        --text-tertiary: #9ca3af;         /* Muted text - medium gray */
+        --text-inverse: #111827;          /* Text on light backgrounds */
+
+        --surface-primary: #1a1a2e;
+        --surface-secondary: #16213e;
+        --surface-tertiary: #0f3460;
+        --border-color: #374151;
+
+        /* Adjusted grays for dark mode readability */
+        --color-gray-50: #1f2937;
+        --color-gray-100: #374151;
+        --color-gray-200: #4b5563;
+        --color-gray-300: #6b7280;
+        --color-gray-400: #9ca3af;
+        --color-gray-500: #d1d5db;
+        --color-gray-600: #e5e7eb;
+        --color-gray-700: #f3f4f6;
+        --color-gray-800: #f9fafb;
+        --color-gray-900: #ffffff;
+
+        --color-dark-bg: #f9fafb;
+        --color-dark-surface: #f3f4f6;
+    }
+
+    /* System preference dark mode */
+    @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+            --text-primary: #f9fafb;
+            --text-secondary: #e5e7eb;
+            --text-tertiary: #9ca3af;
+            --text-inverse: #111827;
+
+            --surface-primary: #1a1a2e;
+            --surface-secondary: #16213e;
+            --surface-tertiary: #0f3460;
+            --border-color: #374151;
+        }
     }
 """

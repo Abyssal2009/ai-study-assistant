@@ -28,7 +28,7 @@ COMPONENTS_CSS = """
         font-weight: var(--font-semibold);
         text-transform: uppercase;
         letter-spacing: var(--tracking-widest);
-        color: var(--color-gray-500);
+        color: var(--text-tertiary);
         text-align: center;
         margin-top: var(--space-2);
     }
@@ -157,12 +157,12 @@ COMPONENTS_CSS = """
     .flashcard-answer {
         font-weight: var(--font-normal);
         font-size: var(--text-lg);
-        color: var(--color-gray-700);
+        color: var(--text-secondary);
     }
 
     .flashcard-hint {
         font-size: var(--text-sm);
-        color: var(--color-gray-500);
+        color: var(--text-tertiary);
         font-style: italic;
         margin-top: var(--space-4);
     }
@@ -215,7 +215,7 @@ COMPONENTS_CSS = """
     /* Flashcard hint reveal */
     .flashcard-hint {
         font-size: var(--text-sm);
-        color: var(--color-gray-500);
+        color: var(--text-tertiary);
         font-style: italic;
         margin-top: var(--space-4);
         opacity: 0;
@@ -246,8 +246,8 @@ COMPONENTS_CSS = """
 
     .assistant-message {
         font-family: var(--font-sans) !important;
-        background: var(--color-gray-50);
-        color: var(--color-dark-bg);
+        background: var(--surface-secondary);
+        color: var(--text-primary);
         padding: var(--space-4) var(--space-5);
         border-radius: 18px 18px 18px 4px;
         margin: var(--space-3) 0;
@@ -269,7 +269,7 @@ COMPONENTS_CSS = """
 
     .chat-timestamp {
         font-size: var(--text-xs);
-        color: var(--color-gray-400);
+        color: var(--text-tertiary);
         margin-top: var(--space-1);
     }
 
@@ -376,7 +376,7 @@ COMPONENTS_CSS = """
 
     .score-label {
         font-size: var(--text-lg);
-        color: var(--color-gray-500);
+        color: var(--text-tertiary);
         margin-top: var(--space-2);
     }
 """

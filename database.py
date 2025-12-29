@@ -191,21 +191,67 @@ def init_database():
             completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             time_taken_minutes INTEGER,
             notes TEXT,
+            raw_content TEXT,
+            ai_summary TEXT,
             FOREIGN KEY (subject_id) REFERENCES subjects(id)
         )
     """)
 
-    # Past paper questions - individual question scores
+    # Migration: Add new columns to past_papers if they don't exist
+    try:
+        cursor.execute("ALTER TABLE past_papers ADD COLUMN raw_content TEXT")
+    except:
+        pass
+    try:
+        cursor.execute("ALTER TABLE past_papers ADD COLUMN ai_summary TEXT")
+    except:
+        pass
+
+    # Past paper questions - individual question scores with analysis
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS paper_questions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             paper_id INTEGER NOT NULL,
             question_number TEXT NOT NULL,
+            question_text TEXT,
             topic TEXT,
+            question_type TEXT,
+            difficulty TEXT,
             max_marks INTEGER NOT NULL,
-            marks_achieved INTEGER NOT NULL,
+            marks_achieved INTEGER DEFAULT 0,
             notes TEXT,
+            ai_analysis TEXT,
             FOREIGN KEY (paper_id) REFERENCES past_papers(id)
+        )
+    """)
+
+    # Migration: Add new columns to paper_questions if they don't exist
+    try:
+        cursor.execute("ALTER TABLE paper_questions ADD COLUMN question_text TEXT")
+    except:
+        pass
+    try:
+        cursor.execute("ALTER TABLE paper_questions ADD COLUMN question_type TEXT")
+    except:
+        pass
+    try:
+        cursor.execute("ALTER TABLE paper_questions ADD COLUMN difficulty TEXT")
+    except:
+        pass
+    try:
+        cursor.execute("ALTER TABLE paper_questions ADD COLUMN ai_analysis TEXT")
+    except:
+        pass
+
+    # Paper analysis reports - cross-paper pattern analysis
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS paper_analysis_reports (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            subject_id INTEGER,
+            report_type TEXT NOT NULL,
+            report_content TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (subject_id) REFERENCES subjects(id)
         )
     """)
 
@@ -1392,15 +1438,19 @@ def get_note_images_count() -> int:
 
 def add_past_paper(subject_id: int, paper_name: str, total_marks: int,
                    exam_board: str = None, year: str = None, paper_number: str = None,
-                   time_taken_minutes: int = None, notes: str = None) -> int:
+                   time_taken_minutes: int = None, notes: str = None,
+                   raw_content: str = None, ai_summary: str = None,
+                   marks_achieved: int = None) -> int:
     """Add a new past paper record. Returns the paper ID."""
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute(
         """INSERT INTO past_papers
-           (subject_id, paper_name, total_marks, exam_board, year, paper_number, time_taken_minutes, notes)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-        (subject_id, paper_name, total_marks, exam_board, year, paper_number, time_taken_minutes, notes)
+           (subject_id, paper_name, total_marks, exam_board, year, paper_number,
+            time_taken_minutes, notes, raw_content, ai_summary)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (subject_id, paper_name, total_marks, exam_board, year, paper_number,
+         time_taken_minutes, notes, raw_content, ai_summary)
     )
     conn.commit()
     paper_id = cursor.lastrowid
@@ -1408,21 +1458,194 @@ def add_past_paper(subject_id: int, paper_name: str, total_marks: int,
     return paper_id
 
 
+def update_paper_summary(paper_id: int, ai_summary: str):
+    """Update the AI summary for a paper."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE past_papers SET ai_summary = ? WHERE id = ?",
+        (ai_summary, paper_id)
+    )
+    conn.commit()
+    conn.close()
+
+
 def add_paper_question(paper_id: int, question_number: str, max_marks: int,
-                       marks_achieved: int, topic: str = None, notes: str = None) -> int:
+                       marks_achieved: int = 0, topic: str = None, notes: str = None,
+                       question_text: str = None, question_type: str = None,
+                       difficulty: str = None, ai_analysis: str = None) -> int:
     """Add a question result to a past paper. Returns the question ID."""
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute(
         """INSERT INTO paper_questions
-           (paper_id, question_number, max_marks, marks_achieved, topic, notes)
-           VALUES (?, ?, ?, ?, ?, ?)""",
-        (paper_id, question_number, max_marks, marks_achieved, topic, notes)
+           (paper_id, question_number, max_marks, marks_achieved, topic, notes,
+            question_text, question_type, difficulty, ai_analysis)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (paper_id, question_number, max_marks, marks_achieved, topic, notes,
+         question_text, question_type, difficulty, ai_analysis)
     )
     conn.commit()
     question_id = cursor.lastrowid
     conn.close()
     return question_id
+
+
+def get_question_type_stats(subject_id: int = None) -> list:
+    """Get statistics by question type."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    if subject_id:
+        cursor.execute("""
+            SELECT
+                pq.question_type,
+                COUNT(*) as count,
+                SUM(pq.max_marks) as total_marks,
+                AVG(CAST(pq.marks_achieved AS FLOAT) / pq.max_marks * 100) as avg_percentage
+            FROM paper_questions pq
+            JOIN past_papers pp ON pq.paper_id = pp.id
+            WHERE pq.question_type IS NOT NULL AND pp.subject_id = ?
+            GROUP BY pq.question_type
+            ORDER BY count DESC
+        """, (subject_id,))
+    else:
+        cursor.execute("""
+            SELECT
+                pq.question_type,
+                COUNT(*) as count,
+                SUM(pq.max_marks) as total_marks,
+                AVG(CAST(pq.marks_achieved AS FLOAT) / pq.max_marks * 100) as avg_percentage
+            FROM paper_questions pq
+            WHERE pq.question_type IS NOT NULL
+            GROUP BY pq.question_type
+            ORDER BY count DESC
+        """)
+
+    results = cursor.fetchall()
+    conn.close()
+    return rows_to_dicts(results)
+
+
+def get_common_topics(subject_id: int = None, limit: int = 10) -> list:
+    """Get most common topics across papers."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    if subject_id:
+        cursor.execute("""
+            SELECT
+                pq.topic,
+                COUNT(*) as frequency,
+                COUNT(DISTINCT pp.id) as paper_count,
+                AVG(CAST(pq.marks_achieved AS FLOAT) / pq.max_marks * 100) as avg_percentage
+            FROM paper_questions pq
+            JOIN past_papers pp ON pq.paper_id = pp.id
+            WHERE pq.topic IS NOT NULL AND pq.topic != '' AND pp.subject_id = ?
+            GROUP BY pq.topic
+            ORDER BY frequency DESC
+            LIMIT ?
+        """, (subject_id, limit))
+    else:
+        cursor.execute("""
+            SELECT
+                pq.topic,
+                COUNT(*) as frequency,
+                COUNT(DISTINCT pp.id) as paper_count,
+                AVG(CAST(pq.marks_achieved AS FLOAT) / pq.max_marks * 100) as avg_percentage
+            FROM paper_questions pq
+            JOIN past_papers pp ON pq.paper_id = pp.id
+            WHERE pq.topic IS NOT NULL AND pq.topic != ''
+            GROUP BY pq.topic
+            ORDER BY frequency DESC
+            LIMIT ?
+        """, (limit,))
+
+    results = cursor.fetchall()
+    conn.close()
+    return rows_to_dicts(results)
+
+
+def save_analysis_report(subject_id: int, report_type: str, report_content: str) -> int:
+    """Save an analysis report."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """INSERT INTO paper_analysis_reports (subject_id, report_type, report_content)
+           VALUES (?, ?, ?)""",
+        (subject_id, report_type, report_content)
+    )
+    conn.commit()
+    report_id = cursor.lastrowid
+    conn.close()
+    return report_id
+
+
+def get_latest_analysis_report(subject_id: int = None, report_type: str = None) -> dict:
+    """Get the latest analysis report."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    if subject_id and report_type:
+        cursor.execute("""
+            SELECT * FROM paper_analysis_reports
+            WHERE subject_id = ? AND report_type = ?
+            ORDER BY created_at DESC LIMIT 1
+        """, (subject_id, report_type))
+    elif subject_id:
+        cursor.execute("""
+            SELECT * FROM paper_analysis_reports
+            WHERE subject_id = ?
+            ORDER BY created_at DESC LIMIT 1
+        """, (subject_id,))
+    elif report_type:
+        cursor.execute("""
+            SELECT * FROM paper_analysis_reports
+            WHERE report_type = ?
+            ORDER BY created_at DESC LIMIT 1
+        """, (report_type,))
+    else:
+        cursor.execute("""
+            SELECT * FROM paper_analysis_reports
+            ORDER BY created_at DESC LIMIT 1
+        """)
+
+    result = cursor.fetchone()
+    conn.close()
+    return dict(result) if result else None
+
+
+def get_all_questions(subject_id: int = None, topic: str = None,
+                      question_type: str = None) -> list:
+    """Get all questions with optional filters."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    query = """
+        SELECT pq.*, pp.paper_name, pp.exam_board, pp.year, s.name as subject_name
+        FROM paper_questions pq
+        JOIN past_papers pp ON pq.paper_id = pp.id
+        JOIN subjects s ON pp.subject_id = s.id
+        WHERE 1=1
+    """
+    params = []
+
+    if subject_id:
+        query += " AND pp.subject_id = ?"
+        params.append(subject_id)
+    if topic:
+        query += " AND pq.topic LIKE ?"
+        params.append(f"%{topic}%")
+    if question_type:
+        query += " AND pq.question_type = ?"
+        params.append(question_type)
+
+    query += " ORDER BY pp.year DESC, pp.paper_name, pq.question_number"
+
+    cursor.execute(query, params)
+    results = cursor.fetchall()
+    conn.close()
+    return rows_to_dicts(results)
 
 
 def get_all_past_papers(subject_id: int = None) -> list:

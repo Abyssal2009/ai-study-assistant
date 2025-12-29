@@ -38,7 +38,7 @@ FORMS_CSS = """
         font-family: var(--font-sans) !important;
         font-size: var(--text-sm) !important;
         font-weight: var(--font-semibold) !important;
-        color: var(--color-gray-700) !important;
+        color: var(--text-secondary) !important;
         letter-spacing: var(--tracking-wide);
         margin-bottom: var(--space-2);
         display: block;
@@ -59,14 +59,15 @@ FORMS_CSS = """
         font-family: var(--font-sans) !important;
         font-size: var(--text-base) !important;
         border-radius: var(--radius-md);
-        border: var(--border-width-2) solid var(--color-gray-200);
+        border: var(--border-width-2) solid var(--border-color);
         padding: var(--space-3) var(--space-5);
         transition: border-color var(--transition-normal), box-shadow var(--transition-normal);
-        color: var(--color-dark-bg);
+        color: var(--text-primary);
+        background: var(--surface-primary);
     }
 
     .stTextInput > div > div > input::placeholder {
-        color: var(--color-gray-400);
+        color: var(--text-tertiary);
         font-style: italic;
     }
 
@@ -121,15 +122,16 @@ FORMS_CSS = """
         font-family: var(--font-sans) !important;
         font-size: var(--text-base) !important;
         border-radius: var(--radius-md);
-        border: var(--border-width-2) solid var(--color-gray-200);
+        border: var(--border-width-2) solid var(--border-color);
         padding: var(--space-4) var(--space-5);
         line-height: var(--leading-relaxed);
-        color: var(--color-dark-bg);
+        color: var(--text-primary);
+        background: var(--surface-primary);
         resize: vertical;
     }
 
     .stTextArea > div > div > textarea::placeholder {
-        color: var(--color-gray-400);
+        color: var(--text-tertiary);
         font-style: italic;
     }
 
@@ -148,8 +150,10 @@ FORMS_CSS = """
         font-size: var(--text-base) !important;
         font-variant-numeric: tabular-nums;
         border-radius: var(--radius-md);
-        border: var(--border-width-2) solid var(--color-gray-200);
+        border: var(--border-width-2) solid var(--border-color);
         padding: var(--space-3) var(--space-4);
+        color: var(--text-primary);
+        background: var(--surface-primary);
     }
 
     .stNumberInput > div > div > input:focus {
@@ -165,8 +169,10 @@ FORMS_CSS = """
         font-family: var(--font-sans) !important;
         font-size: var(--text-base) !important;
         border-radius: var(--radius-md);
-        border: var(--border-width-2) solid var(--color-gray-200);
+        border: var(--border-width-2) solid var(--border-color);
         padding: var(--space-3) var(--space-4);
+        color: var(--text-primary);
+        background: var(--surface-primary);
     }
 
     .stDateInput > div > div > input:focus {
@@ -207,7 +213,7 @@ FORMS_CSS = """
     .stTextArea small,
     .stNumberInput small {
         font-size: var(--text-xs) !important;
-        color: var(--color-gray-500);
+        color: var(--text-tertiary);
         margin-top: var(--space-1);
         display: block;
     }
@@ -221,11 +227,12 @@ FORMS_CSS = """
     }
 
     .stFileUploader > div {
-        border: 2px dashed var(--color-gray-300);
+        border: 2px dashed var(--border-color);
         border-radius: var(--radius-lg);
         padding: var(--space-8);
         text-align: center;
         transition: all var(--transition-normal);
+        color: var(--text-secondary);
     }
 
     .stFileUploader > div:hover {

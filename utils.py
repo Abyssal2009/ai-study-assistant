@@ -137,6 +137,154 @@ def call_claude(api_key: str, prompt: str, system: str = None, model: str = None
         return f"Error: {str(e)}"
 
 
+def call_claude_with_rag(api_key: str, prompt: str, system: str = None,
+                         model: str = None, subject_id: int = None,
+                         use_rag: bool = True) -> tuple:
+    """
+    Call Claude API with RAG (Retrieval-Augmented Generation).
+
+    This function searches your notes, flashcards, and past paper topics
+    for relevant information and includes it in the prompt to give
+    Claude better context for answering your questions.
+
+    Args:
+        api_key: Anthropic API key
+        prompt: User message to send
+        system: System prompt (optional)
+        model: Model to use - 'haiku' or 'sonnet'
+        subject_id: Optional subject filter for RAG search
+        use_rag: Whether to use RAG (default True)
+
+    Returns:
+        Tuple of (response_text, sources_list)
+        sources_list contains the documents used for context
+    """
+    sources = []
+
+    # Get RAG context if enabled
+    augmented_prompt = prompt
+    if use_rag:
+        try:
+            import rag
+            context, sources = rag.get_context_for_query(prompt, max_tokens=1500, subject_id=subject_id)
+
+            if context:
+                augmented_prompt = f"""I have a question: {prompt}
+
+{context}"""
+        except Exception as e:
+            # RAG failed, continue without it
+            pass
+
+    # Build system prompt with RAG awareness
+    base_system = system or "You are a helpful study assistant for GCSE students. Use British English spellings."
+
+    if sources:
+        base_system += """
+
+IMPORTANT: I've provided relevant information from the student's own study materials above.
+When answering:
+1. Use this information when relevant to give personalised answers
+2. Reference their notes/flashcards when applicable
+3. If the information is helpful, mention you found it in their materials
+4. If the question isn't covered by their materials, answer from your general knowledge"""
+
+    try:
+        from anthropic import Anthropic
+        client = Anthropic(api_key=api_key)
+
+        model_key = model or DEFAULT_MODEL
+        model_id = CLAUDE_MODELS.get(model_key, CLAUDE_MODELS[DEFAULT_MODEL])['id']
+
+        messages = [{"role": "user", "content": augmented_prompt}]
+
+        response = client.messages.create(
+            model=model_id,
+            max_tokens=2048,
+            system=base_system,
+            messages=messages
+        )
+
+        return response.content[0].text, sources
+
+    except Exception as e:
+        return f"Error: {str(e)}", []
+
+
+def call_claude_chat_with_rag(api_key: str, messages: list, system: str = None,
+                               model: str = None, subject_id: int = None,
+                               use_rag: bool = True) -> tuple:
+    """
+    Call Claude API with RAG for multi-turn chat conversations.
+
+    Args:
+        api_key: Anthropic API key
+        messages: List of message dicts with 'role' and 'content'
+        system: System prompt (optional)
+        model: Model to use
+        subject_id: Optional subject filter for RAG
+        use_rag: Whether to use RAG
+
+    Returns:
+        Tuple of (response_text, sources_list)
+    """
+    sources = []
+
+    # Get the last user message for RAG search
+    last_user_msg = None
+    for msg in reversed(messages):
+        if msg['role'] == 'user':
+            last_user_msg = msg['content']
+            break
+
+    # Augment last user message with RAG context
+    augmented_messages = messages.copy()
+    if use_rag and last_user_msg:
+        try:
+            import rag
+            context, sources = rag.get_context_for_query(last_user_msg, max_tokens=1500, subject_id=subject_id)
+
+            if context and sources:
+                # Add context as a system-like injection in the last user message
+                for i in range(len(augmented_messages) - 1, -1, -1):
+                    if augmented_messages[i]['role'] == 'user':
+                        augmented_messages[i] = {
+                            'role': 'user',
+                            'content': f"{augmented_messages[i]['content']}\n\n{context}"
+                        }
+                        break
+        except Exception:
+            pass
+
+    # Build system prompt
+    base_system = system or "You are a helpful study assistant for GCSE students. Use British English spellings."
+
+    if sources:
+        base_system += """
+
+IMPORTANT: Relevant information from the student's study materials has been provided.
+Use this information when answering, and mention when something comes from their notes."""
+
+    try:
+        from anthropic import Anthropic
+        client = Anthropic(api_key=api_key)
+
+        model_key = model or DEFAULT_MODEL
+        model_id = CLAUDE_MODELS.get(model_key, CLAUDE_MODELS[DEFAULT_MODEL])['id']
+
+        response = client.messages.create(
+            model=model_id,
+            max_tokens=2048,
+            system=base_system,
+            messages=augmented_messages
+        )
+
+        return response.content[0].text, sources
+
+    except Exception as e:
+        return f"Error: {str(e)}", []
+
+
 # Urgency labels for recommendations
 URGENCY_LABELS = {
     'critical': '🚨 CRITICAL',

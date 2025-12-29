@@ -83,7 +83,7 @@ BADGES_CSS = """
     }
 
     .due-later {
-        color: var(--color-gray-500) !important;
+        color: var(--text-tertiary) !important;
         font-weight: var(--font-medium) !important;
     }
 
@@ -151,8 +151,8 @@ BADGES_CSS = """
         font-family: var(--font-mono) !important;
         font-size: var(--text-xs);
         font-weight: var(--font-bold);
-        background: var(--color-gray-200);
-        color: var(--color-gray-700);
+        background: var(--surface-tertiary);
+        color: var(--text-secondary);
         padding: 2px var(--space-2);
         border-radius: var(--radius-md);
         font-variant-numeric: tabular-nums;
@@ -201,15 +201,15 @@ BADGES_CSS = """
         font-family: var(--font-sans) !important;
         font-size: var(--text-xs);
         font-weight: var(--font-medium);
-        background: var(--color-gray-100);
-        color: var(--color-gray-700);
+        background: var(--surface-tertiary);
+        color: var(--text-secondary);
         padding: var(--space-1) var(--space-3);
         border-radius: var(--radius-md);
         transition: all var(--transition-fast);
     }
 
     .tag:hover {
-        background: var(--color-gray-200);
+        background: var(--surface-secondary);
     }
 
     .tag-clickable {

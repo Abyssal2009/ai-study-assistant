@@ -1,11 +1,11 @@
 """
 Study Assistant - Bubble Ace Page
-AI chatbot study buddy.
+AI chatbot study buddy with RAG (Retrieval-Augmented Generation).
 """
 
 import streamlit as st
 import database as db
-from utils import call_claude, CLAUDE_MODELS, DEFAULT_MODEL
+from utils import call_claude_chat_with_rag, CLAUDE_MODELS, DEFAULT_MODEL
 
 
 def render():
@@ -20,6 +20,10 @@ def render():
         st.session_state.chat_history = []
     if 'ai_model' not in st.session_state:
         st.session_state.ai_model = DEFAULT_MODEL
+    if 'use_rag' not in st.session_state:
+        st.session_state.use_rag = True
+    if 'last_sources' not in st.session_state:
+        st.session_state.last_sources = []
 
     # Settings expander
     with st.expander("⚙️ Settings", expanded=not st.session_state.bubble_ace_api_key):
@@ -66,6 +70,20 @@ def render():
 
         current_model = CLAUDE_MODELS[st.session_state.ai_model]
         st.info(f"Using: {current_model['icon']} **{current_model['name']}**")
+
+        # RAG toggle
+        st.markdown("---")
+        st.markdown("**Knowledge Base (RAG):**")
+        use_rag = st.checkbox(
+            "Search my notes & flashcards for context",
+            value=st.session_state.use_rag,
+            help="When enabled, Bubble Ace will search your notes, flashcards, and past paper topics to give more personalised answers."
+        )
+        if use_rag != st.session_state.use_rag:
+            st.session_state.use_rag = use_rag
+
+        if st.session_state.use_rag:
+            st.caption("RAG enabled - answers will reference your study materials when relevant.")
 
     if not st.session_state.bubble_ace_api_key:
         st.warning("Please enter your Claude API key above to start chatting!")
@@ -114,6 +132,20 @@ def render():
             <div class="assistant-message">{msg['content']}</div>
             """, unsafe_allow_html=True)
 
+    # Show sources from last response if RAG found any
+    if st.session_state.last_sources:
+        with st.expander(f"📚 Sources used ({len(st.session_state.last_sources)} items)", expanded=False):
+            for source in st.session_state.last_sources:
+                source_type = source.get('source_type', 'unknown')
+                if source_type == 'note':
+                    st.markdown(f"📝 **Note:** {source.get('title', 'Untitled')}")
+                elif source_type == 'flashcard':
+                    st.markdown(f"🎴 **Flashcard:** {source.get('preview', '')[:100]}...")
+                elif source_type == 'past_paper':
+                    st.markdown(f"📄 **Past Paper:** {source.get('title', 'Untitled')}")
+                else:
+                    st.markdown(f"📎 {source.get('preview', '')[:100]}...")
+
     # Chat input
     default_text = st.session_state.pop('quick_prompt', '')
     user_input = st.text_input("Ask Bubble Ace:", value=default_text, key="chat_input")
@@ -123,20 +155,26 @@ def render():
 
         with st.spinner("Bubble Ace is thinking..."):
             subject_context = ""
+            subject_id = None
             if subjects and selected_subject:
                 subject_context = f"The student is currently studying {selected_subject['name']}. "
+                subject_id = selected_subject['id']
 
             system = f"""You are Bubble Ace, a friendly and encouraging AI study buddy for GCSE students.
 {subject_context}
 Use British English. Be helpful, clear, and supportive.
 Keep responses concise but informative. Use examples when helpful."""
 
-            response = call_claude(
-                st.session_state.bubble_ace_api_key,
-                user_input,
-                system,
-                model=st.session_state.ai_model
+            # Use RAG-enhanced chat
+            response, sources = call_claude_chat_with_rag(
+                api_key=st.session_state.bubble_ace_api_key,
+                messages=st.session_state.chat_history,
+                system=system,
+                model=st.session_state.ai_model,
+                subject_id=subject_id,
+                use_rag=st.session_state.use_rag
             )
             st.session_state.chat_history.append({"role": "assistant", "content": response})
+            st.session_state.last_sources = sources
 
         st.rerun()

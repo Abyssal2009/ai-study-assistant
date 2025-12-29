@@ -40,7 +40,7 @@ INTERACTIVE_CSS = """
 
     /* Secondary buttons */
     .stButton > button[kind="secondary"] {
-        background: var(--color-gray-50);
+        background: var(--surface-secondary);
         color: var(--color-primary);
         border: var(--border-width-2) solid var(--color-primary);
         box-shadow: none;
@@ -74,7 +74,7 @@ INTERACTIVE_CSS = """
 
     .stTabs [data-baseweb="tab-list"] {
         gap: var(--space-2);
-        background: var(--color-gray-50);
+        background: var(--surface-secondary);
         padding: var(--space-2);
         border-radius: var(--radius-lg);
         margin-bottom: var(--space-6);
@@ -90,7 +90,7 @@ INTERACTIVE_CSS = """
         padding: var(--space-3) var(--space-6);
         transition: all var(--transition-normal);
         text-align: center;
-        color: var(--color-gray-600);
+        color: var(--text-secondary);
     }
 
     .stTabs [data-baseweb="tab"]:hover {
@@ -114,8 +114,8 @@ INTERACTIVE_CSS = """
 
     .stExpander {
         border-radius: var(--radius-lg);
-        border: 1px solid var(--color-gray-200);
-        background: white;
+        border: 1px solid var(--border-color);
+        background: var(--surface-primary);
         box-shadow: var(--shadow-sm);
         overflow: hidden;
         margin: var(--space-4) 0;
@@ -154,7 +154,7 @@ INTERACTIVE_CSS = """
 
     /* Custom progress bar container */
     .progress-container {
-        background: var(--color-gray-100);
+        background: var(--surface-tertiary);
         border-radius: var(--radius-md);
         height: 8px;
         overflow: hidden;

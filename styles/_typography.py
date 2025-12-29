@@ -38,7 +38,7 @@ TYPOGRAPHY_CSS = """
     /* Section headers */
     h2 {
         font-family: var(--font-display) !important;
-        color: var(--color-dark-bg) !important;
+        color: var(--text-primary) !important;
         font-weight: var(--font-bold) !important;
         font-size: var(--text-2xl) !important;
         margin-top: var(--space-10) !important;
@@ -52,7 +52,7 @@ TYPOGRAPHY_CSS = """
     /* Subsection headers */
     h3 {
         font-family: var(--font-display) !important;
-        color: var(--color-dark-surface) !important;
+        color: var(--text-primary) !important;
         font-weight: var(--font-semibold) !important;
         font-size: var(--text-xl) !important;
         margin-top: var(--space-8) !important;
@@ -64,7 +64,7 @@ TYPOGRAPHY_CSS = """
     /* Small headers */
     h4 {
         font-family: var(--font-display) !important;
-        color: var(--color-gray-700) !important;
+        color: var(--text-secondary) !important;
         font-weight: var(--font-semibold) !important;
         font-size: var(--text-lg) !important;
         margin-top: var(--space-6) !important;
@@ -80,7 +80,7 @@ TYPOGRAPHY_CSS = """
     p {
         font-size: var(--text-base);
         line-height: var(--leading-relaxed);
-        color: var(--color-gray-700);
+        color: var(--text-secondary);
         margin-bottom: var(--space-4);
         max-width: 70ch; /* Optimal reading width */
     }
@@ -89,7 +89,7 @@ TYPOGRAPHY_CSS = """
     li {
         font-size: var(--text-base);
         line-height: var(--leading-relaxed);
-        color: var(--color-gray-700);
+        color: var(--text-secondary);
         margin-bottom: var(--space-2);
         padding-left: var(--space-1);
     }
@@ -108,27 +108,27 @@ TYPOGRAPHY_CSS = """
     /* Strong/bold text */
     strong, b {
         font-weight: var(--font-semibold);
-        color: var(--color-dark-bg);
+        color: var(--text-primary);
     }
 
     /* Emphasis/italic */
     em, i {
         font-style: italic;
-        color: var(--color-gray-600);
+        color: var(--text-secondary);
     }
 
     /* Small text */
     small, .small {
         font-size: var(--text-sm);
         line-height: var(--leading-normal);
-        color: var(--color-gray-500);
+        color: var(--text-tertiary);
     }
 
     /* Captions and helper text */
     .caption, figcaption {
         font-size: var(--text-sm);
         line-height: var(--leading-normal);
-        color: var(--color-gray-500);
+        color: var(--text-tertiary);
         margin-top: var(--space-2);
     }
 
@@ -192,7 +192,9 @@ TYPOGRAPHY_CSS = """
     .text-success { color: var(--color-success) !important; }
     .text-error { color: var(--color-error) !important; }
     .text-warning { color: var(--color-warning) !important; }
-    .text-muted { color: var(--color-gray-500) !important; }
+    .text-muted { color: var(--text-tertiary) !important; }
+    .text-body { color: var(--text-secondary) !important; }
+    .text-heading { color: var(--text-primary) !important; }
 
     /* Transforms */
     .uppercase { text-transform: uppercase !important; }

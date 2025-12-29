@@ -255,7 +255,7 @@ INTERACTIONS_CSS = """
         width: 20px;
         height: 20px;
         margin: -10px 0 0 -10px;
-        border: 2px solid var(--color-gray-200);
+        border: 2px solid var(--border-color);
         border-top-color: var(--color-primary);
         border-radius: 50%;
         animation: spin 0.8s linear infinite;
@@ -269,7 +269,8 @@ INTERACTIONS_CSS = """
         content: '';
         position: absolute;
         inset: 0;
-        background: rgba(255, 255, 255, 0.8);
+        background: var(--surface-primary);
+        opacity: 0.8;
         z-index: 10;
         border-radius: inherit;
     }
@@ -282,7 +283,7 @@ INTERACTIONS_CSS = """
         width: 30px;
         height: 30px;
         margin: -15px 0 0 -15px;
-        border: 3px solid var(--color-gray-200);
+        border: 3px solid var(--border-color);
         border-top-color: var(--color-primary);
         border-radius: 50%;
         animation: spin 0.8s linear infinite;
@@ -293,9 +294,9 @@ INTERACTIONS_CSS = """
     .skeleton {
         background: linear-gradient(
             90deg,
-            var(--color-gray-100) 25%,
-            var(--color-gray-200) 50%,
-            var(--color-gray-100) 75%
+            var(--surface-secondary) 25%,
+            var(--surface-tertiary) 50%,
+            var(--surface-secondary) 75%
         );
         background-size: 200% 100%;
         animation: shimmer 1.5s infinite;
@@ -514,7 +515,7 @@ INTERACTIONS_CSS = """
     }
 
     .context-menu-item:hover {
-        background: var(--color-gray-100);
+        background: var(--surface-secondary);
     }
 
     .context-menu-item-danger {
@@ -527,7 +528,7 @@ INTERACTIONS_CSS = """
 
     .context-menu-divider {
         height: 1px;
-        background: var(--color-gray-200);
+        background: var(--border-color);
         margin: var(--space-2) 0;
     }
 
@@ -550,11 +551,12 @@ INTERACTIONS_CSS = """
     }
 
     .drop-zone {
-        border: 2px dashed var(--color-gray-300);
+        border: 2px dashed var(--border-color);
         border-radius: var(--radius-lg);
         padding: var(--space-8);
         text-align: center;
         transition: all var(--transition-normal);
+        color: var(--text-secondary);
     }
 
     .drop-zone-active {
@@ -578,7 +580,7 @@ INTERACTIONS_CSS = """
     }
 
     .selectable:hover {
-        background: var(--color-gray-50);
+        background: var(--surface-secondary);
     }
 
     .selected {

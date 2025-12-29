@@ -153,7 +153,7 @@ CARDS_CSS = """
         font-family: var(--font-sans) !important;
         font-size: var(--text-base) !important;
         font-weight: var(--font-semibold) !important;
-        color: var(--color-dark-bg) !important;
+        color: var(--text-primary) !important;
         margin-bottom: var(--space-2) !important;
     }
 
@@ -205,12 +205,13 @@ CARDS_CSS = """
 
     /* Note card */
     .note-card {
-        background: white;
+        background: var(--surface-primary);
         padding: var(--space-6);
         margin: var(--space-4) 0;
         border-radius: var(--radius-lg);
         box-shadow: var(--shadow-sm);
         transition: all var(--transition-normal);
+        color: var(--text-secondary);
     }
 
     .note-card:hover {
@@ -225,7 +226,7 @@ CARDS_CSS = """
         font-family: var(--font-sans) !important;
         font-size: var(--text-sm) !important;
         font-weight: var(--font-medium) !important;
-        color: var(--color-gray-500) !important;
+        color: var(--text-tertiary) !important;
         text-transform: uppercase;
         letter-spacing: var(--tracking-wide);
         margin-bottom: var(--space-1);
