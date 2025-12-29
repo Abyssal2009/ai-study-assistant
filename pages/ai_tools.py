@@ -1,11 +1,12 @@
 """
 Study Assistant - AI Tools Page
 AI-powered study tools including flashcard generation, quiz creation, and more.
+Uses RAG to provide context from your notes and flashcards.
 """
 
 import streamlit as st
 import database as db
-from utils import call_claude, CLAUDE_MODELS, DEFAULT_MODEL
+from utils import call_claude_with_rag, CLAUDE_MODELS, DEFAULT_MODEL, days_until
 
 
 def render():
@@ -18,6 +19,8 @@ def render():
         st.session_state.bubble_ace_api_key = ""
     if 'ai_model' not in st.session_state:
         st.session_state.ai_model = DEFAULT_MODEL
+    if 'ai_tools_use_rag' not in st.session_state:
+        st.session_state.ai_tools_use_rag = True
 
     # API Key check
     if not st.session_state.bubble_ace_api_key:
@@ -41,8 +44,8 @@ def render():
         st.warning("Please add subjects first in the Subjects page.")
         st.stop()
 
-    # Model selector
-    col1, col2, col3 = st.columns([2, 1, 1])
+    # Model and RAG selector
+    col1, col2, col3, col4 = st.columns([2, 1, 1, 2])
     with col1:
         current_model = CLAUDE_MODELS[st.session_state.ai_model]
         st.markdown(f"**Model:** {current_model['icon']} {current_model['name']}")
@@ -54,6 +57,14 @@ def render():
         if st.button("✨ Sonnet", type="primary" if st.session_state.ai_model == 'sonnet' else "secondary"):
             st.session_state.ai_model = 'sonnet'
             st.rerun()
+    with col4:
+        use_rag = st.checkbox(
+            "📚 Use my notes",
+            value=st.session_state.ai_tools_use_rag,
+            help="Search your notes and flashcards for relevant context"
+        )
+        if use_rag != st.session_state.ai_tools_use_rag:
+            st.session_state.ai_tools_use_rag = use_rag
 
     st.markdown("---")
 
@@ -66,37 +77,55 @@ def render():
         "✍️ Essay Helper"
     ])
 
-    # Local helper for Claude API
-    def _call_claude(prompt: str, system: str = None) -> str:
-        return call_claude(
-            st.session_state.bubble_ace_api_key,
-            prompt,
-            system,
-            model=st.session_state.ai_model
+    # Local helper for Claude API with RAG support
+    def _call_claude(prompt: str, system: str = None, subject_id: int = None) -> tuple:
+        """Call Claude with optional RAG. Returns (response, sources)."""
+        response, sources = call_claude_with_rag(
+            api_key=st.session_state.bubble_ace_api_key,
+            prompt=prompt,
+            system=system,
+            model=st.session_state.ai_model,
+            subject_id=subject_id,
+            use_rag=st.session_state.ai_tools_use_rag
         )
+        return response, sources
+
+    # Helper to display RAG sources
+    def _show_sources(sources):
+        """Display sources used by RAG if any."""
+        if sources:
+            with st.expander(f"📚 Sources from your materials ({len(sources)} items)"):
+                for source in sources:
+                    source_type = source.get('source_type', 'unknown')
+                    if source_type == 'note':
+                        st.markdown(f"📝 **Note:** {source.get('title', 'Untitled')}")
+                    elif source_type == 'flashcard':
+                        st.markdown(f"🎴 **Flashcard:** {source.get('preview', '')[:80]}...")
+                    elif source_type == 'past_paper':
+                        st.markdown(f"📄 **Past Paper:** {source.get('title', 'Untitled')}")
 
     # TAB 1: GENERATE FLASHCARDS
     with tab1:
-        _render_flashcard_tab(subjects, _call_claude)
+        _render_flashcard_tab(subjects, _call_claude, _show_sources)
 
     # TAB 2: CREATE QUIZ
     with tab2:
-        _render_quiz_tab(subjects, _call_claude)
+        _render_quiz_tab(subjects, _call_claude, _show_sources)
 
     # TAB 3: SUMMARISE NOTES
     with tab3:
-        _render_summary_tab(subjects, _call_claude)
+        _render_summary_tab(subjects, _call_claude, _show_sources)
 
     # TAB 4: STUDY COACH
     with tab4:
-        _render_coach_tab(subjects, _call_claude)
+        _render_coach_tab(subjects, _call_claude, _show_sources)
 
     # TAB 5: ESSAY HELPER
     with tab5:
-        _render_essay_tab(subjects, _call_claude)
+        _render_essay_tab(subjects, _call_claude, _show_sources)
 
 
-def _render_flashcard_tab(subjects, call_claude):
+def _render_flashcard_tab(subjects, call_claude, show_sources):
     """Render the flashcard generation tab."""
     st.markdown("### 🃏 Generate Flashcards from Notes")
     st.markdown("Let AI create flashcards from your notes or any topic.")
@@ -133,7 +162,7 @@ A: [answer]
 
 Make the questions test understanding, not just memorisation."""
 
-                    result = call_claude(prompt)
+                    result, sources = call_claude(prompt, subject_id=selected_note['subject_id'])
                     if not result.startswith("Error:"):
                         st.success("Flashcards generated!")
                         st.markdown("### Generated Flashcards")
@@ -141,6 +170,7 @@ Make the questions test understanding, not just memorisation."""
                         st.session_state['generated_flashcards'] = result
                         st.session_state['fc_subject_id'] = selected_note['subject_id']
                         st.session_state['fc_topic'] = selected_note['topic'] or selected_note['title']
+                        show_sources(sources)
                     else:
                         st.error(result)
         else:
@@ -168,18 +198,19 @@ A: [answer]
 
 Make the questions appropriate for GCSE level."""
 
-                    result = call_claude(prompt)
+                    result, sources = call_claude(prompt, subject_id=fc_subject['id'])
                     if not result.startswith("Error:"):
                         st.success("Flashcards generated!")
                         st.markdown("### Generated Flashcards")
                         st.markdown(result)
+                        show_sources(sources)
                     else:
                         st.error(result)
             else:
                 st.warning("Please enter a topic.")
 
 
-def _render_quiz_tab(subjects, call_claude):
+def _render_quiz_tab(subjects, call_claude, show_sources):
     """Render the quiz creation tab."""
     st.markdown("### ❓ Create a Practice Quiz")
     st.markdown("Generate quiz questions to test your knowledge.")
@@ -228,18 +259,19 @@ Format:
 
 Continue for all {quiz_num} questions."""
 
-                result = call_claude(prompt)
+                result, sources = call_claude(prompt, subject_id=quiz_subject['id'])
                 if not result.startswith("Error:"):
                     st.success("Quiz generated!")
                     st.markdown("### Your Quiz")
                     st.markdown(result)
+                    show_sources(sources)
                 else:
                     st.error(result)
         else:
             st.warning("Please enter a topic.")
 
 
-def _render_summary_tab(subjects, call_claude):
+def _render_summary_tab(subjects, call_claude, show_sources):
     """Render the notes summary tab."""
     st.markdown("### 📝 Summarise & Simplify")
     st.markdown("Get AI summaries of your notes or complex topics.")
@@ -278,11 +310,12 @@ Notes:
 
 Create a {sum_style.lower()} summary. Focus on key concepts and important facts."""
 
-                    result = call_claude(prompt)
+                    result, sources = call_claude(prompt, subject_id=selected_note['subject_id'])
                     if not result.startswith("Error:"):
                         st.success("Summary generated!")
                         st.markdown("### Summary")
                         st.markdown(result)
+                        show_sources(sources)
                     else:
                         st.error(result)
         else:
@@ -319,18 +352,19 @@ Create a {sum_style.lower()} summary. Focus on key concepts and important facts.
 
 Structure: 1. Definition 2. How it works 3. Why it matters 4. Key exam points"""
 
-                    result = call_claude(prompt)
+                    result, sources = call_claude(prompt, subject_id=exp_subject['id'])
                     if not result.startswith("Error:"):
                         st.success("Explanation generated!")
                         st.markdown("### Explanation")
                         st.markdown(result)
+                        show_sources(sources)
                     else:
                         st.error(result)
             else:
                 st.warning("Please enter a topic.")
 
 
-def _render_coach_tab(subjects, call_claude):
+def _render_coach_tab(subjects, call_claude, show_sources):
     """Render the study coach tab."""
     st.markdown("### 🎯 AI Study Coach")
     st.markdown("Get personalised study advice based on your data.")
@@ -340,9 +374,10 @@ def _render_coach_tab(subjects, call_claude):
     flashcard_stats = db.get_flashcard_stats()
     weak_topics = db.get_weak_topics(5)
     paper_count = db.get_paper_count()
+    exams = db.get_all_exams()
 
     st.markdown("#### Your Current Situation")
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
 
     with col1:
         st.metric("Pending Homework", homework_stats['pending'])
@@ -355,6 +390,13 @@ def _render_coach_tab(subjects, call_claude):
     with col3:
         st.metric("Past Papers Done", paper_count)
         st.metric("Weak Topics", len(weak_topics))
+
+    with col4:
+        st.metric("Upcoming Exams", len(exams))
+        if exams:
+            next_exam = exams[0]
+            days_to_exam = days_until(next_exam['exam_date'])
+            st.metric("Next Exam In", f"{days_to_exam} days")
 
     st.markdown("---")
 
@@ -376,10 +418,20 @@ def _render_coach_tab(subjects, call_claude):
     if st.button("🎯 Get Advice", type="primary"):
         if coach_question:
             with st.spinner("Analyzing your study data..."):
+                # Build exam info string
+                if exams:
+                    exam_info = ', '.join([
+                        f"{e['name']} ({days_until(e['exam_date'])} days)"
+                        for e in exams[:5]  # Show up to 5 upcoming exams
+                    ])
+                else:
+                    exam_info = 'None scheduled'
+
                 context = f"""Student's current study situation:
 Homework: Pending={homework_stats['pending']}, Overdue={homework_stats['overdue']}
 Flashcards: Due today={flashcard_stats['due_today']}, Accuracy={flashcard_stats['accuracy_7_days']}%
 Past Papers: {paper_count} completed
+Upcoming exams: {exam_info}
 Weak topics: {', '.join([t['topic'] for t in weak_topics]) if weak_topics else 'None'}
 Subjects: {', '.join([s['name'] for s in subjects])}"""
 
@@ -389,15 +441,16 @@ Student's question: {coach_question}
 
 Provide specific, actionable advice based on their actual data. Be encouraging but realistic."""
 
-                result = call_claude(prompt, system="You are an experienced study coach helping a GCSE student.")
+                result, sources = call_claude(prompt, system="You are an experienced study coach helping a GCSE student.")
                 if not result.startswith("Error:"):
                     st.markdown("### 💡 Study Coach Advice")
                     st.markdown(result)
+                    show_sources(sources)
                 else:
                     st.error(result)
 
 
-def _render_essay_tab(subjects, call_claude):
+def _render_essay_tab(subjects, call_claude, show_sources):
     """Render the essay helper tab."""
     st.markdown("### ✍️ Essay & Extended Writing Helper")
     st.markdown("Get help planning and improving essays.")
@@ -432,10 +485,11 @@ Marks: {essay_marks}
 
 Provide: 1. Key points 2. Structure 3. Keywords 4. Common mistakes 5. How to get full marks"""
 
-                    result = call_claude(prompt)
+                    result, sources = call_claude(prompt, subject_id=essay_subject['id'])
                     if not result.startswith("Error:"):
                         st.markdown("### Essay Plan")
                         st.markdown(result)
+                        show_sources(sources)
                     else:
                         st.error(result)
             else:

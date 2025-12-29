@@ -72,10 +72,17 @@ def init_database():
             duration_minutes INTEGER,
             location TEXT,
             notes TEXT,
+            google_calendar_id TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (subject_id) REFERENCES subjects(id)
         )
     """)
+
+    # Migration: Add google_calendar_id column if it doesn't exist
+    try:
+        cursor.execute("ALTER TABLE exams ADD COLUMN google_calendar_id TEXT")
+    except:
+        pass  # Column already exists
 
     # Focus sessions table - tracks study time
     cursor.execute("""
@@ -146,6 +153,29 @@ def init_database():
             is_favourite INTEGER DEFAULT 0,
             FOREIGN KEY (subject_id) REFERENCES subjects(id)
         )
+    """)
+
+    # Note images table - stores images from OCR alongside extracted text
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS note_images (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            note_id INTEGER NOT NULL,
+            filename TEXT NOT NULL,
+            original_filename TEXT,
+            file_path TEXT NOT NULL,
+            file_size INTEGER,
+            width INTEGER,
+            height INTEGER,
+            extracted_text TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE
+        )
+    """)
+
+    # Index for searching images by extracted text
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_note_images_text
+        ON note_images(extracted_text)
     """)
 
     # Past papers table - for tracking practice papers
@@ -425,13 +455,61 @@ def get_exams_this_month() -> list:
     return rows_to_dicts(exams)
 
 
-def delete_exam(exam_id: int):
-    """Delete an exam."""
+def delete_exam(exam_id: int) -> str:
+    """Delete an exam. Returns the google_calendar_id if it existed."""
     conn = get_connection()
     cursor = conn.cursor()
+    # Get calendar ID before deleting
+    cursor.execute("SELECT google_calendar_id FROM exams WHERE id = ?", (exam_id,))
+    row = cursor.fetchone()
+    calendar_id = row['google_calendar_id'] if row else None
     cursor.execute("DELETE FROM exams WHERE id = ?", (exam_id,))
     conn.commit()
     conn.close()
+    return calendar_id
+
+
+def get_exam_by_id(exam_id: int) -> dict:
+    """Get a single exam by ID."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT e.*, s.name as subject_name, s.colour as subject_colour
+        FROM exams e
+        JOIN subjects s ON e.subject_id = s.id
+        WHERE e.id = ?
+    """, (exam_id,))
+    exam = cursor.fetchone()
+    conn.close()
+    return dict(exam) if exam else None
+
+
+def update_exam_calendar_id(exam_id: int, calendar_id: str):
+    """Update the Google Calendar ID for an exam."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE exams SET google_calendar_id = ? WHERE id = ?",
+        (calendar_id, exam_id)
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_exams_without_calendar_id() -> list:
+    """Get exams that haven't been synced to Google Calendar."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT e.*, s.name as subject_name, s.colour as subject_colour
+        FROM exams e
+        JOIN subjects s ON e.subject_id = s.id
+        WHERE e.google_calendar_id IS NULL
+        ORDER BY e.exam_date ASC
+    """)
+    exams = cursor.fetchall()
+    conn.close()
+    return rows_to_dicts(exams)
 
 
 # =============================================================================
@@ -1217,6 +1295,95 @@ def get_recent_notes(limit: int = 5) -> list:
     notes = cursor.fetchall()
     conn.close()
     return rows_to_dicts(notes)
+
+
+# =============================================================================
+# NOTE IMAGES FUNCTIONS
+# =============================================================================
+
+def add_note_image(note_id: int, filename: str, original_filename: str,
+                   file_path: str, file_size: int = None, width: int = None,
+                   height: int = None, extracted_text: str = None) -> int:
+    """Add an image associated with a note (from OCR)."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO note_images
+        (note_id, filename, original_filename, file_path, file_size, width, height, extracted_text)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """, (note_id, filename, original_filename, file_path, file_size, width, height, extracted_text))
+    image_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    return image_id
+
+
+def get_note_images(note_id: int) -> list:
+    """Get all images associated with a note."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT * FROM note_images
+        WHERE note_id = ?
+        ORDER BY created_at ASC
+    """, (note_id,))
+    images = cursor.fetchall()
+    conn.close()
+    return rows_to_dicts(images)
+
+
+def get_note_image_by_id(image_id: int):
+    """Get a single note image by ID."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM note_images WHERE id = ?", (image_id,))
+    image = cursor.fetchone()
+    conn.close()
+    return row_to_dict(image)
+
+
+def delete_note_image(image_id: int):
+    """Delete a note image by ID."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM note_images WHERE id = ?", (image_id,))
+    conn.commit()
+    conn.close()
+
+
+def delete_note_images(note_id: int):
+    """Delete all images associated with a note."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM note_images WHERE note_id = ?", (note_id,))
+    conn.commit()
+    conn.close()
+
+
+def get_all_note_images() -> list:
+    """Get all note images (for backup purposes)."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT ni.*, n.title as note_title, s.name as subject_name
+        FROM note_images ni
+        JOIN notes n ON ni.note_id = n.id
+        JOIN subjects s ON n.subject_id = s.id
+        ORDER BY ni.created_at DESC
+    """)
+    images = cursor.fetchall()
+    conn.close()
+    return rows_to_dicts(images)
+
+
+def get_note_images_count() -> int:
+    """Get count of all note images."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) as count FROM note_images")
+    result = cursor.fetchone()
+    conn.close()
+    return result['count'] if result else 0
 
 
 # =============================================================================

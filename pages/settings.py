@@ -328,6 +328,21 @@ def _render_google_drive_section():
             st.markdown("##### Cloud Backups")
             for cb in cloud_backups[:5]:
                 st.caption(f"☁️ {cb['name']} ({cb['size_mb']:.2f} MB)")
+
+        # Google Calendar status
+        st.markdown("---")
+        st.markdown("##### Google Calendar Sync")
+        try:
+            from cloud.google_calendar import get_client as get_calendar_client
+            cal_client = get_calendar_client()
+            if cal_client.is_authenticated():
+                st.success("📅 Calendar sync enabled")
+                st.caption("Exams will sync to 'Study Assistant Exams' calendar")
+            else:
+                st.info("📅 Calendar sync available - reconnect to enable")
+                st.caption("Calendar scope may need re-authorization")
+        except Exception as e:
+            st.caption(f"Calendar status: {e}")
     else:
         st.info("Not connected to Google Drive")
 
@@ -335,9 +350,9 @@ def _render_google_drive_section():
             st.warning("""
             **Google credentials file not found.**
 
-            To set up Google Drive:
+            To set up Google Drive & Calendar:
             1. Go to [Google Cloud Console](https://console.cloud.google.com)
-            2. Create a project and enable Drive API
+            2. Create a project and enable **Drive API** and **Calendar API**
             3. Create OAuth 2.0 credentials (Desktop app)
             4. Download the credentials JSON file
             5. Save it as `google_credentials.json` in the app folder

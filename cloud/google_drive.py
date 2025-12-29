@@ -14,8 +14,11 @@ TOKEN_PATH = Path(__file__).parent.parent / "google_token.json"
 CREDENTIALS_PATH = Path(__file__).parent.parent / "google_credentials.json"
 BACKUP_FOLDER = "StudyAssistantBackups"
 
-# OAuth scopes
-SCOPES = ['https://www.googleapis.com/auth/drive.file']
+# OAuth scopes (Drive for backups, Calendar for exam sync)
+SCOPES = [
+    'https://www.googleapis.com/auth/drive.file',
+    'https://www.googleapis.com/auth/calendar'
+]
 
 
 class GoogleDriveClient:
