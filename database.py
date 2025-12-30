@@ -538,6 +538,41 @@ def init_database():
         )
     """)
 
+    # ==========================================================================
+    # STUDY SKILLS COACH TABLES
+    # ==========================================================================
+
+    # Study methods - note-taking and active learning methods
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS study_methods (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            category TEXT NOT NULL,
+            method_type TEXT NOT NULL,
+            title TEXT NOT NULL,
+            description TEXT NOT NULL,
+            when_to_use TEXT,
+            steps TEXT NOT NULL,
+            tips TEXT,
+            example_template TEXT,
+            display_order INTEGER DEFAULT 0
+        )
+    """)
+
+    # Note evaluations - history of AI note evaluations
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS note_evaluations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            subject_id INTEGER,
+            method_used TEXT,
+            note_content TEXT NOT NULL,
+            word_count INTEGER,
+            overall_score INTEGER,
+            feedback_json TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (subject_id) REFERENCES subjects(id)
+        )
+    """)
+
     # Index for efficient card_reviews date lookups
     cursor.execute("""
         CREATE INDEX IF NOT EXISTS idx_card_reviews_date
@@ -5365,6 +5400,343 @@ def delete_technique_session(session_id: int):
     cursor = conn.cursor()
     cursor.execute("DELETE FROM technique_practice_responses WHERE session_id = ?", (session_id,))
     cursor.execute("DELETE FROM technique_practice_sessions WHERE id = ?", (session_id,))
+    conn.commit()
+    conn.close()
+
+
+# =============================================================================
+# STUDY SKILLS COACH FUNCTIONS
+# =============================================================================
+
+def seed_study_methods():
+    """Seed initial study methods content if table is empty."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    # Check if already seeded
+    cursor.execute("SELECT COUNT(*) FROM study_methods")
+    if cursor.fetchone()[0] > 0:
+        conn.close()
+        return 0
+
+    import json
+    methods = [
+        # NOTE-TAKING METHODS
+        {
+            "category": "note_taking",
+            "method_type": "cornell",
+            "title": "Cornell Note-Taking Method",
+            "description": "Divide your page into three sections: notes, cues, and summary. Perfect for lectures and textbook reading.",
+            "when_to_use": "Lectures, textbook reading, revision sessions",
+            "steps": json.dumps([
+                "Draw a vertical line about 6cm from the left edge of your page",
+                "Draw a horizontal line about 5cm from the bottom",
+                "Take notes in the large right section during class",
+                "After class, write questions and cues in the left column",
+                "Write a 2-3 sentence summary in the bottom section"
+            ]),
+            "tips": json.dumps([
+                "Leave space between ideas for later additions",
+                "Use abbreviations consistently",
+                "Review within 24 hours to fill in the cue column",
+                "Use the summary to test yourself later"
+            ]),
+            "example_template": """## Cornell Notes: [Topic]
+
+| Cue Column | Notes |
+|------------|-------|
+| What causes...? | - Main point 1 |
+| Define... | - Supporting detail |
+| Why is...? | - Example or evidence |
+
+---
+**Summary:** Write 2-3 sentences summarising the key takeaways from this section.""",
+            "display_order": 1
+        },
+        {
+            "category": "note_taking",
+            "method_type": "outline",
+            "title": "Outline Method",
+            "description": "Hierarchical structure with main topics, subtopics, and supporting details. Great for well-organised subjects.",
+            "when_to_use": "Well-structured content, science topics, history timelines, any logical sequence",
+            "steps": json.dumps([
+                "Write main topics as Roman numerals (I, II, III)",
+                "Indent subtopics with capital letters (A, B, C)",
+                "Further indent supporting details with numbers (1, 2, 3)",
+                "Use consistent indentation throughout your notes"
+            ]),
+            "tips": json.dumps([
+                "Listen for signal words like 'firstly', 'importantly', 'in contrast'",
+                "Leave space to add details later",
+                "Use bullet points for quick facts",
+                "Number your pages for easy reference"
+            ]),
+            "example_template": """## I. Main Topic
+   A. Subtopic 1
+      1. Supporting detail
+      2. Example or evidence
+   B. Subtopic 2
+      1. Key point
+      2. Related fact
+
+## II. Second Main Topic
+   A. First subtopic
+      1. Detail
+   B. Second subtopic""",
+            "display_order": 2
+        },
+        {
+            "category": "note_taking",
+            "method_type": "mind_map",
+            "title": "Mind Mapping",
+            "description": "Visual diagram with a central idea branching into related concepts. Excellent for brainstorming and seeing connections.",
+            "when_to_use": "Brainstorming, revision, essay planning, seeing relationships between ideas",
+            "steps": json.dumps([
+                "Write the main topic in the centre of your page",
+                "Draw branches outward for main subtopics",
+                "Add smaller branches for details and examples",
+                "Use colours and small images to aid memory",
+                "Connect related ideas with lines across branches"
+            ]),
+            "tips": json.dumps([
+                "Use single words or short phrases, not full sentences",
+                "Make branches curved rather than straight - it's more memorable",
+                "Use different colours for different branches",
+                "Add small drawings or symbols to help you remember"
+            ]),
+            "example_template": """```
+                    [Subtopic A]
+                   /
+    [Detail] --- [Branch 1] --- [Detail]
+                /
+    [CENTRAL TOPIC]
+                \\
+    [Detail] --- [Branch 2] --- [Detail]
+                   \\
+                    [Subtopic B]
+```
+
+Start with your main topic in the centre, then branch out!""",
+            "display_order": 3
+        },
+        {
+            "category": "note_taking",
+            "method_type": "charting",
+            "title": "Charting Method",
+            "description": "Organise information in columns and rows. Perfect for comparing and contrasting multiple topics.",
+            "when_to_use": "Comparing topics, vocabulary lists, historical events, scientific concepts with multiple properties",
+            "steps": json.dumps([
+                "Identify the categories or features you want to compare",
+                "Create columns with clear headings",
+                "Fill in information row by row as you learn",
+                "Keep entries brief and consistent across columns"
+            ]),
+            "tips": json.dumps([
+                "Pre-draw your chart before class if you know the topic",
+                "Leave extra rows blank to fill in later",
+                "Use this method for revision comparison tables",
+                "Colour-code similar information across columns"
+            ]),
+            "example_template": """| Feature | Option A | Option B | Option C |
+|---------|----------|----------|----------|
+| Definition | ... | ... | ... |
+| Advantages | ... | ... | ... |
+| Disadvantages | ... | ... | ... |
+| Example | ... | ... | ... |
+| When to use | ... | ... | ... |""",
+            "display_order": 4
+        },
+        # ACTIVE LEARNING TECHNIQUES
+        {
+            "category": "active_learning",
+            "method_type": "summarising",
+            "title": "Active Summarisation",
+            "description": "Condense information into your own words. Forces deep understanding rather than passive copying.",
+            "when_to_use": "After reading a chapter, reviewing notes, preparing for exams",
+            "steps": json.dumps([
+                "Read the entire section or chapter first",
+                "Close the book and write down what you remember",
+                "Check for gaps and fill them in",
+                "Reduce your notes to only the key points"
+            ]),
+            "tips": json.dumps([
+                "Aim for 20-30% of the original length",
+                "Use your own words, not copied phrases",
+                "Include examples only if they help understanding",
+                "Test yourself by explaining the summary to someone else"
+            ]),
+            "example_template": None,
+            "display_order": 10
+        },
+        {
+            "category": "active_learning",
+            "method_type": "self_testing",
+            "title": "Self-Testing (Retrieval Practice)",
+            "description": "Test yourself without looking at notes. The effort of retrieval strengthens memory far more than re-reading.",
+            "when_to_use": "Daily revision, before exams, reinforcing new material",
+            "steps": json.dumps([
+                "Close your notes completely",
+                "Write down everything you can remember about the topic",
+                "Check against your notes for accuracy",
+                "Focus your next revision on what you forgot"
+            ]),
+            "tips": json.dumps([
+                "Testing is MORE effective than re-reading - research proves it!",
+                "Use flashcards for quick self-tests",
+                "Space your tests over days, not just hours",
+                "Getting answers wrong actually helps learning!"
+            ]),
+            "example_template": None,
+            "display_order": 11
+        },
+        {
+            "category": "active_learning",
+            "method_type": "spaced_repetition",
+            "title": "Spaced Repetition",
+            "description": "Review material at increasing intervals. Much more effective than cramming everything at once.",
+            "when_to_use": "Long-term learning, memorising facts, vocabulary, formulas",
+            "steps": json.dumps([
+                "Learn new material thoroughly on day 1",
+                "Review after 1 day",
+                "Review again after 3 days",
+                "Then after 1 week, 2 weeks, 1 month, etc.",
+                "Increase intervals as you get better at recalling"
+            ]),
+            "tips": json.dumps([
+                "Use the Flashcards feature - it has spaced repetition built in!",
+                "Start revision early to give yourself time for spacing",
+                "Review before you forget completely",
+                "This is how memory champions learn hundreds of facts"
+            ]),
+            "example_template": None,
+            "display_order": 12
+        },
+        {
+            "category": "active_learning",
+            "method_type": "elaboration",
+            "title": "Elaboration",
+            "description": "Connect new information to what you already know. Ask 'why' and 'how' questions to deepen understanding.",
+            "when_to_use": "Understanding complex concepts, making information meaningful, preparing for essay questions",
+            "steps": json.dumps([
+                "Ask yourself 'Why does this work?' or 'How does this connect?'",
+                "Explain the concept in your own words",
+                "Think of examples from your own experience",
+                "Connect to other topics you've studied"
+            ]),
+            "tips": json.dumps([
+                "The more connections you make, the easier it is to remember",
+                "Teach the concept to someone else - it forces elaboration",
+                "Create analogies: 'This is like...'",
+                "Write about how new information changes your understanding"
+            ]),
+            "example_template": None,
+            "display_order": 13
+        }
+    ]
+
+    for method in methods:
+        cursor.execute("""
+            INSERT INTO study_methods (category, method_type, title, description,
+                                       when_to_use, steps, tips, example_template, display_order)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (method['category'], method['method_type'], method['title'], method['description'],
+              method['when_to_use'], method['steps'], method['tips'],
+              method['example_template'], method['display_order']))
+
+    conn.commit()
+    count = len(methods)
+    conn.close()
+    return count
+
+
+def get_study_methods(category: str = None, method_type: str = None) -> list:
+    """Get study methods with optional filtering."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    query = "SELECT * FROM study_methods WHERE 1=1"
+    params = []
+
+    if category:
+        query += " AND category = ?"
+        params.append(category)
+    if method_type:
+        query += " AND method_type = ?"
+        params.append(method_type)
+
+    query += " ORDER BY display_order, title"
+    cursor.execute(query, params)
+    methods = cursor.fetchall()
+    conn.close()
+    return rows_to_dicts(methods)
+
+
+def save_note_evaluation(subject_id: int, method_used: str, note_content: str,
+                         word_count: int, overall_score: int, feedback_json: str) -> int:
+    """Save a note evaluation."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO note_evaluations (subject_id, method_used, note_content,
+                                      word_count, overall_score, feedback_json)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (subject_id, method_used, note_content, word_count, overall_score, feedback_json))
+    conn.commit()
+    evaluation_id = cursor.lastrowid
+    conn.close()
+    return evaluation_id
+
+
+def get_note_evaluations(subject_id: int = None, limit: int = 20) -> list:
+    """Get recent note evaluations."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    if subject_id:
+        cursor.execute("""
+            SELECT ne.*, s.name as subject_name, s.colour as subject_colour
+            FROM note_evaluations ne
+            LEFT JOIN subjects s ON ne.subject_id = s.id
+            WHERE ne.subject_id = ?
+            ORDER BY ne.created_at DESC
+            LIMIT ?
+        """, (subject_id, limit))
+    else:
+        cursor.execute("""
+            SELECT ne.*, s.name as subject_name, s.colour as subject_colour
+            FROM note_evaluations ne
+            LEFT JOIN subjects s ON ne.subject_id = s.id
+            ORDER BY ne.created_at DESC
+            LIMIT ?
+        """, (limit,))
+    evaluations = cursor.fetchall()
+    conn.close()
+    return rows_to_dicts(evaluations)
+
+
+def get_note_evaluation_stats() -> dict:
+    """Get aggregate stats for note evaluations."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT
+            COUNT(*) as total_evaluations,
+            COALESCE(AVG(overall_score), 0) as avg_score,
+            COALESCE(MAX(overall_score), 0) as best_score,
+            COALESCE(MIN(overall_score), 0) as lowest_score
+        FROM note_evaluations
+    """)
+    row = cursor.fetchone()
+    conn.close()
+    return row_to_dict(row) if row else {
+        'total_evaluations': 0, 'avg_score': 0, 'best_score': 0, 'lowest_score': 0
+    }
+
+
+def delete_note_evaluation(evaluation_id: int):
+    """Delete a note evaluation."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM note_evaluations WHERE id = ?", (evaluation_id,))
     conn.commit()
     conn.close()
 
