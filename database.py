@@ -344,6 +344,67 @@ def init_database():
         )
     """)
 
+    # Study schedules - main schedule storage
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS study_schedules (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            start_date DATE NOT NULL,
+            end_date DATE NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            is_active INTEGER DEFAULT 1,
+            total_hours_planned INTEGER,
+            generation_params TEXT
+        )
+    """)
+
+    # Schedule sessions - individual study sessions within a schedule
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS schedule_sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            schedule_id INTEGER NOT NULL,
+            subject_id INTEGER NOT NULL,
+            topic TEXT,
+            scheduled_date DATE NOT NULL,
+            start_time TEXT,
+            duration_minutes INTEGER NOT NULL DEFAULT 30,
+            priority_score REAL,
+            reason TEXT,
+            status TEXT DEFAULT 'pending',
+            completed_at TIMESTAMP,
+            actual_duration_minutes INTEGER,
+            notes TEXT,
+            FOREIGN KEY (schedule_id) REFERENCES study_schedules(id) ON DELETE CASCADE,
+            FOREIGN KEY (subject_id) REFERENCES subjects(id)
+        )
+    """)
+
+    # Schedule adjustments - track automatic changes for transparency
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS schedule_adjustments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            schedule_id INTEGER NOT NULL,
+            session_id INTEGER,
+            adjustment_type TEXT NOT NULL,
+            old_value TEXT,
+            new_value TEXT,
+            reason TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (schedule_id) REFERENCES study_schedules(id) ON DELETE CASCADE
+        )
+    """)
+
+    # Study preferences - user preferences for scheduling
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS study_preferences (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            preference_key TEXT NOT NULL UNIQUE,
+            preference_value TEXT NOT NULL,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
     conn.commit()
     conn.close()
 
@@ -3128,6 +3189,964 @@ def get_available_topics_for_subject(subject_id: int) -> list:
     # Combine and deduplicate
     all_topics = list(set(paper_topics + flashcard_topics))
     return sorted(all_topics)
+
+
+# =============================================================================
+# STUDY SCHEDULE FUNCTIONS
+# =============================================================================
+
+def create_study_schedule(name: str, start_date: date, end_date: date,
+                          generation_params: dict = None) -> int:
+    """Create a new study schedule. Returns the schedule ID."""
+    import json
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    # Deactivate any existing active schedules
+    cursor.execute("UPDATE study_schedules SET is_active = 0 WHERE is_active = 1")
+
+    params_json = json.dumps(generation_params) if generation_params else None
+    cursor.execute("""
+        INSERT INTO study_schedules (name, start_date, end_date, generation_params)
+        VALUES (?, ?, ?, ?)
+    """, (name, start_date.isoformat(), end_date.isoformat(), params_json))
+    conn.commit()
+    schedule_id = cursor.lastrowid
+    conn.close()
+    return schedule_id
+
+
+def get_active_schedule() -> dict:
+    """Get the currently active study schedule with sessions."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT * FROM study_schedules WHERE is_active = 1
+    """)
+    schedule = cursor.fetchone()
+    conn.close()
+    if schedule:
+        return row_to_dict(schedule)
+    return None
+
+
+def get_schedule_by_id(schedule_id: int) -> dict:
+    """Get a specific schedule with all its sessions."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM study_schedules WHERE id = ?", (schedule_id,))
+    schedule = cursor.fetchone()
+    conn.close()
+    return row_to_dict(schedule)
+
+
+def get_all_schedules(include_inactive: bool = False) -> list:
+    """Get all schedules, optionally including inactive ones."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    if include_inactive:
+        cursor.execute("SELECT * FROM study_schedules ORDER BY created_at DESC")
+    else:
+        cursor.execute("SELECT * FROM study_schedules WHERE is_active = 1 ORDER BY created_at DESC")
+    schedules = cursor.fetchall()
+    conn.close()
+    return rows_to_dicts(schedules)
+
+
+def deactivate_schedule(schedule_id: int):
+    """Mark a schedule as inactive."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE study_schedules SET is_active = 0 WHERE id = ?", (schedule_id,))
+    conn.commit()
+    conn.close()
+
+
+def update_schedule_hours(schedule_id: int, total_hours: int):
+    """Update the total planned hours for a schedule."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        UPDATE study_schedules
+        SET total_hours_planned = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+    """, (total_hours, schedule_id))
+    conn.commit()
+    conn.close()
+
+
+def add_schedule_session(schedule_id: int, subject_id: int, scheduled_date: date,
+                         duration_minutes: int, topic: str = None,
+                         priority_score: float = None, reason: str = None,
+                         start_time: str = None) -> int:
+    """Add a study session to a schedule."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO schedule_sessions
+        (schedule_id, subject_id, scheduled_date, duration_minutes, topic,
+         priority_score, reason, start_time)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """, (schedule_id, subject_id, scheduled_date.isoformat(), duration_minutes,
+          topic, priority_score, reason, start_time))
+    conn.commit()
+    session_id = cursor.lastrowid
+    conn.close()
+    return session_id
+
+
+def get_sessions_for_date(schedule_id: int, target_date: date) -> list:
+    """Get all sessions scheduled for a specific date."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT ss.*, s.name as subject_name, s.colour as subject_colour
+        FROM schedule_sessions ss
+        JOIN subjects s ON ss.subject_id = s.id
+        WHERE ss.schedule_id = ? AND ss.scheduled_date = ?
+        ORDER BY ss.start_time, ss.priority_score DESC
+    """, (schedule_id, target_date.isoformat()))
+    sessions = cursor.fetchall()
+    conn.close()
+    return rows_to_dicts(sessions)
+
+
+def get_sessions_for_week(schedule_id: int, week_start: date) -> list:
+    """Get all sessions for a week starting from week_start."""
+    week_end = week_start + timedelta(days=6)
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT ss.*, s.name as subject_name, s.colour as subject_colour
+        FROM schedule_sessions ss
+        JOIN subjects s ON ss.subject_id = s.id
+        WHERE ss.schedule_id = ? AND ss.scheduled_date BETWEEN ? AND ?
+        ORDER BY ss.scheduled_date, ss.start_time, ss.priority_score DESC
+    """, (schedule_id, week_start.isoformat(), week_end.isoformat()))
+    sessions = cursor.fetchall()
+    conn.close()
+    return rows_to_dicts(sessions)
+
+
+def get_all_schedule_sessions(schedule_id: int) -> list:
+    """Get all sessions for a schedule."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT ss.*, s.name as subject_name, s.colour as subject_colour
+        FROM schedule_sessions ss
+        JOIN subjects s ON ss.subject_id = s.id
+        WHERE ss.schedule_id = ?
+        ORDER BY ss.scheduled_date, ss.start_time
+    """, (schedule_id,))
+    sessions = cursor.fetchall()
+    conn.close()
+    return rows_to_dicts(sessions)
+
+
+def mark_session_complete(session_id: int, actual_duration: int = None, notes: str = None):
+    """Mark a session as completed."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        UPDATE schedule_sessions
+        SET status = 'completed', completed_at = CURRENT_TIMESTAMP,
+            actual_duration_minutes = ?, notes = ?
+        WHERE id = ?
+    """, (actual_duration, notes, session_id))
+    conn.commit()
+    conn.close()
+
+
+def mark_session_missed(session_id: int):
+    """Mark a session as missed (triggers rescheduling)."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        UPDATE schedule_sessions
+        SET status = 'missed'
+        WHERE id = ?
+    """, (session_id,))
+    conn.commit()
+    conn.close()
+
+
+def reschedule_session(session_id: int, new_date: date, new_time: str = None,
+                       reason: str = None):
+    """Reschedule a session to a new date/time."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    # Get current session data for logging
+    cursor.execute("SELECT * FROM schedule_sessions WHERE id = ?", (session_id,))
+    old_session = row_to_dict(cursor.fetchone())
+
+    # Update session
+    cursor.execute("""
+        UPDATE schedule_sessions
+        SET scheduled_date = ?, start_time = ?, status = 'rescheduled'
+        WHERE id = ?
+    """, (new_date.isoformat(), new_time, session_id))
+
+    # Log the adjustment
+    if old_session:
+        import json
+        cursor.execute("""
+            INSERT INTO schedule_adjustments
+            (schedule_id, session_id, adjustment_type, old_value, new_value, reason)
+            VALUES (?, ?, 'rescheduled', ?, ?, ?)
+        """, (old_session['schedule_id'], session_id,
+              json.dumps({'date': old_session['scheduled_date'], 'time': old_session['start_time']}),
+              json.dumps({'date': new_date.isoformat(), 'time': new_time}),
+              reason or 'Session rescheduled'))
+
+    conn.commit()
+    conn.close()
+
+
+def log_schedule_adjustment(schedule_id: int, adjustment_type: str,
+                            reason: str, session_id: int = None,
+                            old_value: dict = None, new_value: dict = None):
+    """Log an adjustment for transparency."""
+    import json
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO schedule_adjustments
+        (schedule_id, session_id, adjustment_type, old_value, new_value, reason)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (schedule_id, session_id, adjustment_type,
+          json.dumps(old_value) if old_value else None,
+          json.dumps(new_value) if new_value else None,
+          reason))
+    conn.commit()
+    conn.close()
+
+
+def get_schedule_adjustments(schedule_id: int, limit: int = 20) -> list:
+    """Get recent adjustments to a schedule."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT * FROM schedule_adjustments
+        WHERE schedule_id = ?
+        ORDER BY created_at DESC
+        LIMIT ?
+    """, (schedule_id, limit))
+    adjustments = cursor.fetchall()
+    conn.close()
+    return rows_to_dicts(adjustments)
+
+
+def delete_schedule(schedule_id: int):
+    """Delete a schedule and all its sessions."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM schedule_adjustments WHERE schedule_id = ?", (schedule_id,))
+    cursor.execute("DELETE FROM schedule_sessions WHERE schedule_id = ?", (schedule_id,))
+    cursor.execute("DELETE FROM study_schedules WHERE id = ?", (schedule_id,))
+    conn.commit()
+    conn.close()
+
+
+def get_session_stats(schedule_id: int) -> dict:
+    """Get statistics for a schedule's sessions."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    # Total sessions
+    cursor.execute("""
+        SELECT COUNT(*) as total FROM schedule_sessions WHERE schedule_id = ?
+    """, (schedule_id,))
+    total = cursor.fetchone()['total']
+
+    # Completed
+    cursor.execute("""
+        SELECT COUNT(*) as completed FROM schedule_sessions
+        WHERE schedule_id = ? AND status = 'completed'
+    """, (schedule_id,))
+    completed = cursor.fetchone()['completed']
+
+    # Missed
+    cursor.execute("""
+        SELECT COUNT(*) as missed FROM schedule_sessions
+        WHERE schedule_id = ? AND status = 'missed'
+    """, (schedule_id,))
+    missed = cursor.fetchone()['missed']
+
+    # Pending
+    cursor.execute("""
+        SELECT COUNT(*) as pending FROM schedule_sessions
+        WHERE schedule_id = ? AND status = 'pending'
+    """, (schedule_id,))
+    pending = cursor.fetchone()['pending']
+
+    # Total planned minutes
+    cursor.execute("""
+        SELECT COALESCE(SUM(duration_minutes), 0) as planned_minutes
+        FROM schedule_sessions WHERE schedule_id = ?
+    """, (schedule_id,))
+    planned_minutes = cursor.fetchone()['planned_minutes']
+
+    # Actual completed minutes
+    cursor.execute("""
+        SELECT COALESCE(SUM(COALESCE(actual_duration_minutes, duration_minutes)), 0) as completed_minutes
+        FROM schedule_sessions
+        WHERE schedule_id = ? AND status = 'completed'
+    """, (schedule_id,))
+    completed_minutes = cursor.fetchone()['completed_minutes']
+
+    conn.close()
+
+    return {
+        'total': total,
+        'completed': completed,
+        'missed': missed,
+        'pending': pending,
+        'planned_minutes': planned_minutes,
+        'completed_minutes': completed_minutes,
+        'completion_rate': (completed / total * 100) if total > 0 else 0
+    }
+
+
+# =============================================================================
+# STUDY PREFERENCES FUNCTIONS
+# =============================================================================
+
+def get_study_preference(key: str, default: str = None) -> str:
+    """Get a study preference value."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT preference_value FROM study_preferences WHERE preference_key = ?
+    """, (key,))
+    row = cursor.fetchone()
+    conn.close()
+    return row['preference_value'] if row else default
+
+
+def set_study_preference(key: str, value: str):
+    """Set a study preference value."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO study_preferences (preference_key, preference_value)
+        VALUES (?, ?)
+        ON CONFLICT(preference_key) DO UPDATE SET
+        preference_value = excluded.preference_value,
+        updated_at = CURRENT_TIMESTAMP
+    """, (key, value))
+    conn.commit()
+    conn.close()
+
+
+def get_all_study_preferences() -> dict:
+    """Get all study preferences as a dictionary."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT preference_key, preference_value FROM study_preferences")
+    rows = cursor.fetchall()
+    conn.close()
+    return {r['preference_key']: r['preference_value'] for r in rows}
+
+
+# =============================================================================
+# SMART RECOMMENDATION FUNCTIONS
+# =============================================================================
+
+def calculate_topic_priority(subject_id: int, topic: str, exam_days: int = None,
+                             mastery_level: float = None, trend: str = None,
+                             importance: str = None, days_since_review: int = None) -> float:
+    """
+    Calculate priority score for a topic (0-100 scale).
+
+    Factors:
+    - Exam urgency (35%): closer exams = higher priority
+    - Knowledge gap (30%): lower mastery = higher priority
+    - Topic importance (20%): from exam requirements
+    - Review recency (15%): longer since review = higher priority
+    """
+    score = 0.0
+
+    # 1. Exam Urgency (35%)
+    if exam_days is not None:
+        if exam_days <= 7:
+            urgency_score = 100
+        elif exam_days <= 14:
+            urgency_score = 80
+        elif exam_days <= 30:
+            urgency_score = 60
+        elif exam_days <= 60:
+            urgency_score = 40
+        else:
+            urgency_score = 20
+        score += urgency_score * 0.35
+
+    # 2. Knowledge Gap (30%)
+    if mastery_level is not None:
+        if mastery_level < 30:
+            gap_score = 100
+        elif mastery_level < 50:
+            gap_score = 80
+        elif mastery_level < 70:
+            gap_score = 60
+        elif mastery_level < 85:
+            gap_score = 30
+        else:
+            gap_score = 10
+        # Bonus for declining trend
+        if trend == 'declining':
+            gap_score = min(100, gap_score + 20)
+        score += gap_score * 0.30
+
+    # 3. Topic Importance (20%)
+    importance_scores = {'critical': 100, 'high': 75, 'medium': 50, 'low': 25}
+    importance_score = importance_scores.get(importance, 50)
+    score += importance_score * 0.20
+
+    # 4. Review Recency (15%)
+    if days_since_review is not None:
+        if days_since_review is None or days_since_review > 30:
+            recency_score = 100
+        elif days_since_review > 14:
+            recency_score = 80
+        elif days_since_review > 7:
+            recency_score = 50
+        elif days_since_review > 3:
+            recency_score = 30
+        else:
+            recency_score = 10
+        score += recency_score * 0.15
+
+    return round(score, 1)
+
+
+def get_schedule_generation_data() -> dict:
+    """
+    Gather all data needed for schedule generation.
+    Returns comprehensive data about exams, topics, mastery, and gaps.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    today = date.today()
+
+    # Get all subjects
+    subjects = get_all_subjects()
+
+    # Get all upcoming exams with days until
+    cursor.execute("""
+        SELECT e.*, s.name as subject_name, s.colour as subject_colour
+        FROM exams e
+        JOIN subjects s ON e.subject_id = s.id
+        WHERE e.exam_date >= ?
+        ORDER BY e.exam_date
+    """, (today.isoformat(),))
+    exams = rows_to_dicts(cursor.fetchall())
+    for exam in exams:
+        exam_date = datetime.strptime(exam['exam_date'], '%Y-%m-%d').date()
+        exam['days_until'] = (exam_date - today).days
+
+    # Get all topic mastery data
+    cursor.execute("""
+        SELECT tm.*, s.name as subject_name
+        FROM topic_mastery tm
+        JOIN subjects s ON tm.subject_id = s.id
+        ORDER BY tm.mastery_level ASC
+    """)
+    mastery_data = rows_to_dicts(cursor.fetchall())
+
+    # Get exam requirements (important topics)
+    cursor.execute("""
+        SELECT er.*, s.name as subject_name
+        FROM exam_requirements er
+        JOIN subjects s ON er.subject_id = s.id
+        ORDER BY er.frequency DESC
+    """)
+    requirements = rows_to_dicts(cursor.fetchall())
+
+    # Get flashcard due counts by subject
+    flashcard_counts = {}
+    for subject in subjects:
+        cursor.execute("""
+            SELECT COUNT(*) as due_count FROM flashcards
+            WHERE subject_id = ? AND next_review <= ?
+        """, (subject['id'], today.isoformat()))
+        flashcard_counts[subject['id']] = cursor.fetchone()['due_count']
+
+    # Get knowledge gaps (topics required but not mastered)
+    gaps = get_knowledge_gaps_all()
+
+    conn.close()
+
+    return {
+        'subjects': subjects,
+        'exams': exams,
+        'mastery_data': mastery_data,
+        'requirements': requirements,
+        'flashcard_counts': flashcard_counts,
+        'knowledge_gaps': gaps,
+        'today': today.isoformat()
+    }
+
+
+def get_knowledge_gaps_all() -> list:
+    """Get knowledge gaps across all subjects."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT
+            er.subject_id,
+            er.topic,
+            er.frequency,
+            er.importance_level,
+            COALESCE(tm.mastery_level, 0) as mastery_level,
+            COALESCE(tm.total_attempts, 0) as attempts,
+            tm.trend,
+            tm.last_assessed_at,
+            s.name as subject_name
+        FROM exam_requirements er
+        JOIN subjects s ON er.subject_id = s.id
+        LEFT JOIN topic_mastery tm ON er.subject_id = tm.subject_id AND er.topic = tm.topic
+        WHERE COALESCE(tm.mastery_level, 0) < 70
+        ORDER BY er.frequency DESC, COALESCE(tm.mastery_level, 0) ASC
+    """)
+    gaps = rows_to_dicts(cursor.fetchall())
+    conn.close()
+    return gaps
+
+
+def get_smart_recommendation(available_minutes: int = 30) -> dict:
+    """
+    Get intelligent study recommendation considering all factors.
+
+    Returns the single best topic to study with reasoning.
+    """
+    today = date.today()
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    # Gather all relevant data
+    data = get_schedule_generation_data()
+
+    recommendations = []
+
+    # Process each subject
+    for subject in data['subjects']:
+        subject_id = subject['id']
+
+        # Find the nearest exam for this subject
+        subject_exams = [e for e in data['exams'] if e['subject_id'] == subject_id]
+        exam_days = subject_exams[0]['days_until'] if subject_exams else None
+
+        # Get knowledge gaps for this subject
+        subject_gaps = [g for g in data['knowledge_gaps'] if g['subject_id'] == subject_id]
+
+        # Get flashcard count
+        flashcard_due = data['flashcard_counts'].get(subject_id, 0)
+
+        # If there are knowledge gaps, recommend the highest priority gap
+        for gap in subject_gaps[:3]:  # Consider top 3 gaps per subject
+            # Calculate days since last review
+            days_since = None
+            if gap.get('last_assessed_at'):
+                try:
+                    last_date = datetime.strptime(gap['last_assessed_at'][:10], '%Y-%m-%d').date()
+                    days_since = (today - last_date).days
+                except ValueError:
+                    days_since = 30
+
+            priority = calculate_topic_priority(
+                subject_id=subject_id,
+                topic=gap['topic'],
+                exam_days=exam_days,
+                mastery_level=gap['mastery_level'],
+                trend=gap.get('trend'),
+                importance=gap['importance_level'],
+                days_since_review=days_since
+            )
+
+            # Build reasoning
+            reasons = []
+            if exam_days is not None and exam_days <= 30:
+                reasons.append(f"Exam in {exam_days} days")
+            if gap['mastery_level'] < 50:
+                reasons.append(f"Mastery at {gap['mastery_level']:.0f}% (needs work)")
+            elif gap['mastery_level'] < 70:
+                reasons.append(f"Mastery at {gap['mastery_level']:.0f}% (below target)")
+            if gap.get('trend') == 'declining':
+                reasons.append("Performance declining")
+            if gap['importance_level'] in ['critical', 'high']:
+                reasons.append(f"{gap['importance_level'].title()} exam topic")
+            if days_since and days_since > 7:
+                reasons.append(f"Last reviewed {days_since} days ago")
+
+            recommendations.append({
+                'subject_id': subject_id,
+                'subject_name': gap['subject_name'],
+                'subject_colour': subject.get('colour', '#3498db'),
+                'topic': gap['topic'],
+                'priority_score': priority,
+                'mastery_level': gap['mastery_level'],
+                'reasons': reasons,
+                'estimated_minutes': min(available_minutes, 45),
+                'action_type': 'study_gap',
+                'exam_days': exam_days
+            })
+
+        # Also consider flashcard review if many due
+        if flashcard_due >= 10:
+            fc_priority = 50 + min(25, flashcard_due)
+            if exam_days and exam_days <= 14:
+                fc_priority += 20
+            recommendations.append({
+                'subject_id': subject_id,
+                'subject_name': subject['name'],
+                'subject_colour': subject.get('colour', '#3498db'),
+                'topic': 'Flashcard Review',
+                'priority_score': fc_priority,
+                'mastery_level': None,
+                'reasons': [f"{flashcard_due} flashcards due for review"],
+                'estimated_minutes': min(available_minutes, 20),
+                'action_type': 'flashcard_review',
+                'flashcard_count': flashcard_due,
+                'exam_days': exam_days
+            })
+
+    conn.close()
+
+    # Sort by priority and return top recommendation
+    recommendations.sort(key=lambda x: x['priority_score'], reverse=True)
+
+    if recommendations:
+        top = recommendations[0]
+        return {
+            'recommendation': top,
+            'alternatives': recommendations[1:4]  # Next 3 alternatives
+        }
+
+    return {
+        'recommendation': None,
+        'alternatives': []
+    }
+
+
+def get_subject_study_summary() -> list:
+    """Get summary of study status per subject for schedule overview."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    today = date.today()
+
+    subjects = get_all_subjects()
+    summary = []
+
+    for subject in subjects:
+        # Get nearest exam
+        cursor.execute("""
+            SELECT exam_date, name FROM exams
+            WHERE subject_id = ? AND exam_date >= ?
+            ORDER BY exam_date LIMIT 1
+        """, (subject['id'], today.isoformat()))
+        exam = cursor.fetchone()
+        exam_days = None
+        exam_name = None
+        if exam:
+            exam_date = datetime.strptime(exam['exam_date'], '%Y-%m-%d').date()
+            exam_days = (exam_date - today).days
+            exam_name = exam['name']
+
+        # Get average mastery
+        cursor.execute("""
+            SELECT AVG(mastery_level) as avg_mastery
+            FROM topic_mastery WHERE subject_id = ?
+        """, (subject['id'],))
+        mastery = cursor.fetchone()
+        avg_mastery = mastery['avg_mastery'] if mastery['avg_mastery'] else 0
+
+        # Get knowledge gap count
+        cursor.execute("""
+            SELECT COUNT(*) as gap_count
+            FROM exam_requirements er
+            LEFT JOIN topic_mastery tm ON er.subject_id = tm.subject_id AND er.topic = tm.topic
+            WHERE er.subject_id = ? AND COALESCE(tm.mastery_level, 0) < 70
+        """, (subject['id'],))
+        gaps = cursor.fetchone()['gap_count']
+
+        # Get flashcards due
+        cursor.execute("""
+            SELECT COUNT(*) as due FROM flashcards
+            WHERE subject_id = ? AND next_review <= ?
+        """, (subject['id'], today.isoformat()))
+        flashcards_due = cursor.fetchone()['due']
+
+        summary.append({
+            'subject_id': subject['id'],
+            'subject_name': subject['name'],
+            'subject_colour': subject.get('colour', '#3498db'),
+            'exam_days': exam_days,
+            'exam_name': exam_name,
+            'avg_mastery': round(avg_mastery, 1),
+            'knowledge_gaps': gaps,
+            'flashcards_due': flashcards_due
+        })
+
+    conn.close()
+    return summary
+
+
+def generate_schedule_sessions(schedule_id: int, start_date: date, end_date: date,
+                               daily_minutes: int = 120, session_length: int = 30,
+                               subject_ids: list = None) -> int:
+    """
+    Generate study sessions for a schedule based on priorities.
+
+    Returns the number of sessions created.
+    """
+    data = get_schedule_generation_data()
+    subjects = data['subjects']
+
+    if subject_ids:
+        subjects = [s for s in subjects if s['id'] in subject_ids]
+
+    # Build priority queue of topics to schedule
+    topic_queue = []
+
+    for subject in subjects:
+        subject_id = subject['id']
+
+        # Find exam days
+        subject_exams = [e for e in data['exams'] if e['subject_id'] == subject_id]
+        exam_days = subject_exams[0]['days_until'] if subject_exams else 90
+
+        # Get gaps for this subject
+        subject_gaps = [g for g in data['knowledge_gaps'] if g['subject_id'] == subject_id]
+
+        for gap in subject_gaps:
+            days_since = None
+            if gap.get('last_assessed_at'):
+                try:
+                    last_date = datetime.strptime(gap['last_assessed_at'][:10], '%Y-%m-%d').date()
+                    days_since = (start_date - last_date).days
+                except ValueError:
+                    days_since = 30
+
+            priority = calculate_topic_priority(
+                subject_id=subject_id,
+                topic=gap['topic'],
+                exam_days=exam_days,
+                mastery_level=gap['mastery_level'],
+                trend=gap.get('trend'),
+                importance=gap['importance_level'],
+                days_since_review=days_since
+            )
+
+            # Determine reason
+            reasons = []
+            if exam_days <= 14:
+                reasons.append(f"Exam in {exam_days} days")
+            if gap['mastery_level'] < 50:
+                reasons.append(f"Low mastery ({gap['mastery_level']:.0f}%)")
+            if gap['importance_level'] == 'critical':
+                reasons.append("Critical topic")
+
+            topic_queue.append({
+                'subject_id': subject_id,
+                'subject_name': subject['name'],
+                'topic': gap['topic'],
+                'priority': priority,
+                'reason': ', '.join(reasons) if reasons else 'Knowledge gap'
+            })
+
+        # Add flashcard review if many due
+        flashcard_due = data['flashcard_counts'].get(subject_id, 0)
+        if flashcard_due >= 5:
+            topic_queue.append({
+                'subject_id': subject_id,
+                'subject_name': subject['name'],
+                'topic': 'Flashcard Review',
+                'priority': 40 + min(30, flashcard_due),
+                'reason': f'{flashcard_due} cards due'
+            })
+
+    # Sort by priority
+    topic_queue.sort(key=lambda x: x['priority'], reverse=True)
+
+    # Generate sessions for each day
+    sessions_created = 0
+    current_date = start_date
+    sessions_per_day = daily_minutes // session_length
+    topic_index = 0
+
+    while current_date <= end_date:
+        daily_subject_count = {}  # Track sessions per subject per day
+
+        for _ in range(sessions_per_day):
+            if topic_index >= len(topic_queue):
+                topic_index = 0  # Cycle through topics
+
+            # Find next topic that doesn't exceed 2 per subject per day
+            attempts = 0
+            while attempts < len(topic_queue):
+                topic = topic_queue[topic_index % len(topic_queue)]
+                subject_id = topic['subject_id']
+
+                if daily_subject_count.get(subject_id, 0) < 2:
+                    # Add session
+                    add_schedule_session(
+                        schedule_id=schedule_id,
+                        subject_id=subject_id,
+                        scheduled_date=current_date,
+                        duration_minutes=session_length,
+                        topic=topic['topic'],
+                        priority_score=topic['priority'],
+                        reason=topic['reason']
+                    )
+                    daily_subject_count[subject_id] = daily_subject_count.get(subject_id, 0) + 1
+                    sessions_created += 1
+                    topic_index += 1
+                    break
+
+                topic_index += 1
+                attempts += 1
+
+        current_date += timedelta(days=1)
+
+    # Update schedule with total hours
+    total_hours = (sessions_created * session_length) // 60
+    update_schedule_hours(schedule_id, total_hours)
+
+    return sessions_created
+
+
+# =============================================================================
+# ADAPTIVE ADJUSTMENT FUNCTIONS
+# =============================================================================
+
+def trigger_quiz_adjustment(schedule_id: int, subject_id: int, topic: str,
+                            score_percentage: float):
+    """
+    Adjust schedule based on quiz/assessment results.
+
+    - Score < 50%: Increase session time by 50%
+    - Score < 30%: Add extra session within 2 days
+    """
+    if score_percentage >= 50:
+        return  # No adjustment needed
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    today = date.today()
+
+    # Find upcoming sessions for this subject/topic
+    cursor.execute("""
+        SELECT * FROM schedule_sessions
+        WHERE schedule_id = ? AND subject_id = ? AND topic = ?
+        AND scheduled_date >= ? AND status = 'pending'
+        ORDER BY scheduled_date LIMIT 3
+    """, (schedule_id, subject_id, topic, today.isoformat()))
+    sessions = rows_to_dicts(cursor.fetchall())
+
+    adjustment_made = False
+
+    if score_percentage < 30:
+        # Add extra session
+        next_date = today + timedelta(days=1)
+        add_schedule_session(
+            schedule_id=schedule_id,
+            subject_id=subject_id,
+            scheduled_date=next_date,
+            duration_minutes=45,
+            topic=topic,
+            priority_score=90,
+            reason=f'Extra session: quiz score {score_percentage:.0f}%'
+        )
+        log_schedule_adjustment(
+            schedule_id=schedule_id,
+            adjustment_type='quiz_result',
+            reason=f'Quiz score {score_percentage:.0f}% on {topic} - added extra session',
+            new_value={'topic': topic, 'action': 'added_session', 'date': next_date.isoformat()}
+        )
+        adjustment_made = True
+
+    elif score_percentage < 50 and sessions:
+        # Increase first session duration by 50%
+        session = sessions[0]
+        old_duration = session['duration_minutes']
+        new_duration = int(old_duration * 1.5)
+        cursor.execute("""
+            UPDATE schedule_sessions SET duration_minutes = ?
+            WHERE id = ?
+        """, (new_duration, session['id']))
+        conn.commit()
+        log_schedule_adjustment(
+            schedule_id=schedule_id,
+            session_id=session['id'],
+            adjustment_type='quiz_result',
+            reason=f'Quiz score {score_percentage:.0f}% on {topic} - increased session time',
+            old_value={'duration': old_duration},
+            new_value={'duration': new_duration}
+        )
+        adjustment_made = True
+
+    conn.close()
+    return adjustment_made
+
+
+def trigger_missed_session_adjustment(session_id: int):
+    """
+    Handle missed session by rescheduling to next available slot.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    # Get session details
+    cursor.execute("SELECT * FROM schedule_sessions WHERE id = ?", (session_id,))
+    session = row_to_dict(cursor.fetchone())
+
+    if not session:
+        conn.close()
+        return False
+
+    # Mark as missed
+    mark_session_missed(session_id)
+
+    # Find next available date (within 3 days)
+    today = date.today()
+    for days_ahead in range(1, 4):
+        new_date = today + timedelta(days=days_ahead)
+
+        # Check how many sessions on that day
+        cursor.execute("""
+            SELECT COUNT(*) as count FROM schedule_sessions
+            WHERE schedule_id = ? AND scheduled_date = ? AND status = 'pending'
+        """, (session['schedule_id'], new_date.isoformat()))
+
+        if cursor.fetchone()['count'] < 4:  # Max 4 sessions per day
+            # Create rescheduled session
+            new_session_id = add_schedule_session(
+                schedule_id=session['schedule_id'],
+                subject_id=session['subject_id'],
+                scheduled_date=new_date,
+                duration_minutes=session['duration_minutes'],
+                topic=session['topic'],
+                priority_score=session['priority_score'],
+                reason=f"Rescheduled from {session['scheduled_date']}"
+            )
+
+            log_schedule_adjustment(
+                schedule_id=session['schedule_id'],
+                session_id=new_session_id,
+                adjustment_type='missed_session',
+                reason=f"Session missed - rescheduled to {new_date.isoformat()}",
+                old_value={'date': session['scheduled_date'], 'session_id': session_id},
+                new_value={'date': new_date.isoformat(), 'session_id': new_session_id}
+            )
+
+            conn.close()
+            return True
+
+    conn.close()
+    return False
 
 
 # Initialise database when module is imported

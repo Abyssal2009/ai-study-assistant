@@ -9,7 +9,7 @@ import streamlit as st
 import database as db
 from styles import apply_styles
 from pages import (
-    dashboard, ai_tools, bubble_ace, what_next,
+    dashboard, ai_tools, bubble_ace, study_schedule,
     homework, exams, flashcards, notes,
     past_papers, focus_timer, subjects, statistics, settings,
     knowledge_gaps
@@ -85,7 +85,7 @@ with st.sidebar:
             "Bubble Ace",
             "AI Tools",
             "Knowledge Gaps",
-            "What Next?",
+            "Study Schedule",
             "Homework",
             "Exams",
             "Flashcards",
@@ -124,7 +124,7 @@ PAGE_MODULES = {
     "Bubble Ace": bubble_ace,
     "AI Tools": ai_tools,
     "Knowledge Gaps": knowledge_gaps,
-    "What Next?": what_next,
+    "Study Schedule": study_schedule,
     "Homework": homework,
     "Exams": exams,
     "Flashcards": flashcards,
@@ -146,4 +146,4 @@ if page in PAGE_MODULES:
 # =============================================================================
 
 st.markdown("---")
-st.caption("Study Assistant v2.0 | Knowledge Gaps, AI Tools, Past Papers, OCR, Notes & Bubble Ace! 🎯🤖📄📷📝🫧")
+st.caption("Study Assistant v2.1 | Adaptive Study Schedule, Knowledge Gaps, AI Tools & More! 📅🎯🤖📝")
