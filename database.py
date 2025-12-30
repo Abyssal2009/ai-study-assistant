@@ -464,6 +464,23 @@ def init_database():
         )
     """)
 
+    # Essay submissions - for Essay Writing Tutor
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS essay_submissions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            subject_id INTEGER,
+            essay_title TEXT,
+            essay_question TEXT,
+            essay_text TEXT NOT NULL,
+            word_count INTEGER,
+            grade TEXT,
+            overall_score INTEGER,
+            feedback_json TEXT,
+            submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (subject_id) REFERENCES subjects(id)
+        )
+    """)
+
     # Index for efficient card_reviews date lookups
     cursor.execute("""
         CREATE INDEX IF NOT EXISTS idx_card_reviews_date
@@ -1973,6 +1990,99 @@ def get_all_notification_settings() -> dict:
 
     return {row['setting_key']: {'value': row['setting_value'], 'enabled': bool(row['enabled'])}
             for row in results}
+
+
+# =============================================================================
+# ESSAY TUTOR FUNCTIONS
+# =============================================================================
+
+def save_essay_submission(subject_id: int, title: str, question: str, text: str,
+                          word_count: int, grade: str, overall_score: int,
+                          feedback_json: str) -> int:
+    """Save an essay submission with feedback. Returns the submission ID."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO essay_submissions
+        (subject_id, essay_title, essay_question, essay_text, word_count,
+         grade, overall_score, feedback_json)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """, (subject_id, title, question, text, word_count, grade, overall_score, feedback_json))
+    conn.commit()
+    submission_id = cursor.lastrowid
+    conn.close()
+    return submission_id
+
+
+def get_essay_submissions(subject_id: int = None, limit: int = 20) -> list:
+    """Get essay submissions, optionally filtered by subject."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    if subject_id:
+        cursor.execute("""
+            SELECT e.*, s.name as subject_name, s.colour as subject_colour
+            FROM essay_submissions e
+            LEFT JOIN subjects s ON e.subject_id = s.id
+            WHERE e.subject_id = ?
+            ORDER BY e.submitted_at DESC
+            LIMIT ?
+        """, (subject_id, limit))
+    else:
+        cursor.execute("""
+            SELECT e.*, s.name as subject_name, s.colour as subject_colour
+            FROM essay_submissions e
+            LEFT JOIN subjects s ON e.subject_id = s.id
+            ORDER BY e.submitted_at DESC
+            LIMIT ?
+        """, (limit,))
+
+    results = rows_to_dicts(cursor.fetchall())
+    conn.close()
+    return results
+
+
+def get_essay_by_id(essay_id: int) -> dict:
+    """Get a single essay submission by ID."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT e.*, s.name as subject_name, s.colour as subject_colour
+        FROM essay_submissions e
+        LEFT JOIN subjects s ON e.subject_id = s.id
+        WHERE e.id = ?
+    """, (essay_id,))
+    result = cursor.fetchone()
+    conn.close()
+    return row_to_dict(result)
+
+
+def delete_essay_submission(essay_id: int):
+    """Delete an essay submission."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM essay_submissions WHERE id = ?", (essay_id,))
+    conn.commit()
+    conn.close()
+
+
+def get_essay_stats() -> dict:
+    """Get essay submission statistics."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT
+            COUNT(*) as total_essays,
+            AVG(overall_score) as avg_score,
+            MAX(overall_score) as best_score,
+            AVG(word_count) as avg_word_count
+        FROM essay_submissions
+    """)
+    result = cursor.fetchone()
+    conn.close()
+    return row_to_dict(result) if result else {
+        'total_essays': 0, 'avg_score': 0, 'best_score': 0, 'avg_word_count': 0
+    }
 
 
 # =============================================================================

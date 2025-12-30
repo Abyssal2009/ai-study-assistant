@@ -12,7 +12,7 @@ from pages import (
     dashboard, ai_tools, bubble_ace, study_schedule,
     homework, exams, flashcards, notes,
     past_papers, focus_timer, subjects, statistics, settings,
-    knowledge_gaps, srs_analytics
+    knowledge_gaps, srs_analytics, essay_tutor
 )
 
 
@@ -84,6 +84,7 @@ with st.sidebar:
             "Dashboard",
             "Bubble Ace",
             "AI Tools",
+            "Essay Tutor",
             "Knowledge Gaps",
             "Study Schedule",
             "Homework",
@@ -124,6 +125,7 @@ PAGE_MODULES = {
     "Dashboard": dashboard,
     "Bubble Ace": bubble_ace,
     "AI Tools": ai_tools,
+    "Essay Tutor": essay_tutor,
     "Knowledge Gaps": knowledge_gaps,
     "Study Schedule": study_schedule,
     "Homework": homework,
@@ -148,4 +150,4 @@ if page in PAGE_MODULES:
 # =============================================================================
 
 st.markdown("---")
-st.caption("Study Assistant v2.1 | Adaptive Study Schedule, Knowledge Gaps, AI Tools & More! 📅🎯🤖📝")
+st.caption("Study Assistant v2.2 | Essay Tutor, SRS Analytics, Study Schedule & More! 📝📊📅🤖")
