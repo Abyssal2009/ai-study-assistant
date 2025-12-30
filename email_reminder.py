@@ -210,19 +210,57 @@ def generate_email_content():
                 html += f"<li><span class='subject'>{exam['subject_name']}</span>: {exam['name']} (in {days} days)</li>"
         html += "</ul></div>"
 
-    # Flashcards
+    # Flashcards with enhanced SRS info
     if config.INCLUDE_FLASHCARDS_DUE:
-        html += "<h2>🃏 Flashcards</h2>"
-        if flashcard_stats['due_today'] > 0:
+        html += "<h2>🃏 Flashcards & Spaced Repetition</h2>"
+
+        # Get SRS notification data
+        srs_data = db.get_srs_notification_data()
+
+        if srs_data['cards_due'] > 0 or srs_data['cards_overdue'] > 0:
+            # Cards due section
             html += f"""
             <div class='info'>
-                <p><strong>{flashcard_stats['due_today']} cards</strong> are due for review today.</p>
-                <p>You have {flashcard_stats['total']} total cards.
-                   Your 7-day accuracy is {flashcard_stats['accuracy_7_days']}%.</p>
-            </div>
+                <p><strong>{srs_data['cards_due']} cards</strong> are due for review today.</p>
             """
+
+            # Overdue warning
+            if srs_data['cards_overdue'] > 0:
+                html += f"""
+                <p class='urgent' style='margin: 10px 0; padding: 8px;'>
+                    ⚠️ <strong>{srs_data['cards_overdue']} cards are OVERDUE!</strong>
+                    Review them soon to maintain your memory.
+                </p>
+                """
+
+            html += "</div>"
         else:
             html += "<div class='success'><p>No flashcards due! You're all caught up. ✓</p></div>"
+
+        # Streak status
+        if srs_data['streak'] > 0:
+            html += f"""
+            <div class='success'>
+                <p>🔥 <strong>You're on a {srs_data['streak']}-day streak!</strong> Keep it going!</p>
+            </div>
+            """
+        elif srs_data['cards_due'] > 0:
+            html += """
+            <div class='info'>
+                <p>💪 Start a new streak today by reviewing your flashcards!</p>
+            </div>
+            """
+
+        # Weekly SRS summary
+        weekly = srs_data['weekly_stats']
+        if weekly['cards_reviewed'] > 0:
+            html += f"""
+            <p style="font-size: 0.9em; color: #666; margin-top: 10px;">
+                📊 This week: <strong>{weekly['cards_reviewed']}</strong> cards reviewed |
+                <strong>{weekly['accuracy']}%</strong> accuracy |
+                <strong>{weekly['time_spent_mins']:.0f}</strong> mins study time
+            </p>
+            """
 
     # Stats
     if config.INCLUDE_STUDY_STATS:

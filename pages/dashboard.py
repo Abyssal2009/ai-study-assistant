@@ -123,19 +123,47 @@ def render():
             """, unsafe_allow_html=True)
 
     with col2:
-        st.markdown("### 🃏 Flashcards Due")
-        if fc_due > 0:
+        st.markdown("### 🃏 Flashcards & SRS")
+
+        # Get SRS data
+        srs_data = db.get_srs_notification_data()
+        fc_overdue = srs_data['cards_overdue']
+        streak = srs_data['streak']
+
+        if fc_due > 0 or fc_overdue > 0:
+            # Main alert
+            alert_color = "#e74c3c" if fc_overdue > 0 else "#f39c12"
             st.markdown(f"""
-            <div class="warning-msg">
-                <strong>{fc_due} cards</strong> need review!
+            <div style="background: linear-gradient(135deg, {alert_color}22, {alert_color}11);
+                        border-left: 4px solid {alert_color};
+                        padding: 12px 15px;
+                        border-radius: 0 8px 8px 0;
+                        margin-bottom: 10px;">
+                <strong style="color: {alert_color};">{fc_due} cards due</strong>
+                {f"<span style='color: #e74c3c; margin-left: 10px;'>({fc_overdue} overdue!)</span>" if fc_overdue > 0 else ""}
             </div>
             """, unsafe_allow_html=True)
+
+            # Streak display
+            if streak > 0:
+                st.markdown(f"""
+                <div style="background: #e67e2211; padding: 8px 12px; border-radius: 6px; margin-bottom: 10px;">
+                    🔥 <strong>{streak}-day streak</strong> - Don't break it!
+                </div>
+                """, unsafe_allow_html=True)
+
             if st.button("Start Review", key="dash_review"):
                 st.info("Go to Flashcards page to review")
         else:
             st.markdown("""
             <div class="success-msg">All caught up!</div>
             """, unsafe_allow_html=True)
+            if streak > 0:
+                st.markdown(f"""
+                <div style="background: #2ecc7122; padding: 8px 12px; border-radius: 6px;">
+                    🔥 <strong>{streak}-day streak</strong> - Great job!
+                </div>
+                """, unsafe_allow_html=True)
 
         st.markdown("### 📅 Upcoming Exams")
         if exams:

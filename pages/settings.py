@@ -11,8 +11,8 @@ def render():
     """Render the Settings page."""
     st.title("⚙️ Settings")
 
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
-        "🔑 API Keys", "📧 Email Reminders", "🗄️ Data", "☁️ Backup & Sync", "🔍 Search"
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+        "🔑 API Keys", "📧 Email Reminders", "🃏 SRS Settings", "🗄️ Data", "☁️ Backup & Sync", "🔍 Search"
     ])
 
     # TAB 1: API Keys
@@ -69,8 +69,61 @@ def render():
         except ImportError:
             st.info("Config file not found. Copy config.example.py to config.py")
 
-    # TAB 3: Data Management
+    # TAB 3: SRS Settings
     with tab3:
+        st.markdown("### Spaced Repetition Settings")
+        st.markdown("Configure how the SRS (Spaced Repetition System) works for your flashcards and topics.")
+
+        st.markdown("#### Notification Settings")
+
+        # Get current settings
+        streak_setting = db.get_notification_setting('srs_include_streak', 'true')
+        overdue_setting = db.get_notification_setting('srs_highlight_overdue', 'true')
+
+        include_streak = st.checkbox(
+            "Include streak status in email reminders",
+            value=streak_setting[0] == 'true' if streak_setting[0] else True,
+            help="Show your current review streak in daily email reminders"
+        )
+
+        highlight_overdue = st.checkbox(
+            "Highlight overdue cards in notifications",
+            value=overdue_setting[0] == 'true' if overdue_setting[0] else True,
+            help="Show warnings when you have overdue flashcards"
+        )
+
+        if st.button("Save SRS Settings", key="save_srs_settings"):
+            db.set_notification_setting('srs_include_streak', str(include_streak).lower(), include_streak)
+            db.set_notification_setting('srs_highlight_overdue', str(highlight_overdue).lower(), highlight_overdue)
+            st.success("SRS settings saved!")
+
+        st.markdown("---")
+        st.markdown("#### Topic Sync")
+        st.markdown("Sync topics from flashcards to enable topic-level spaced repetition tracking.")
+
+        if st.button("Sync Topics from Flashcards"):
+            count = db.sync_topics_from_flashcards()
+            if count > 0:
+                st.success(f"Synced {count} new topics for review tracking!")
+            else:
+                st.info("All flashcard topics are already synced.")
+
+        # Show topic stats
+        topics_due = db.get_topics_due_count()
+        st.metric("Topics Due for Review", topics_due)
+
+        st.markdown("---")
+        st.markdown("#### SRS Statistics")
+
+        streak = db.get_review_streak()
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("Current Streak", f"{streak['current_streak']} days")
+        with col2:
+            st.metric("Longest Streak", f"{streak['longest_streak']} days")
+
+    # TAB 4: Data Management
+    with tab4:
         st.markdown("### Data Management")
 
         # Database stats
@@ -148,8 +201,8 @@ def render():
         Built with Streamlit + Python + SQLite
         """)
 
-    # TAB 4: Backup & Sync
-    with tab4:
+    # TAB 5: Backup & Sync
+    with tab5:
         st.markdown("### Backup & Sync")
 
         import backup
@@ -262,8 +315,8 @@ def render():
                     del st.session_state.pending_restore
                     st.rerun()
 
-    # TAB 5: Search (RAG Status)
-    with tab5:
+    # TAB 6: Search (RAG Status)
+    with tab6:
         st.markdown("### Search & Indexing")
 
         try:

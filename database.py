@@ -405,6 +405,71 @@ def init_database():
         )
     """)
 
+    # ==========================================================================
+    # SRS ANALYTICS TABLES
+    # ==========================================================================
+
+    # Review activity - daily aggregated stats for analytics
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS review_activity (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            activity_date DATE NOT NULL UNIQUE,
+            cards_reviewed INTEGER DEFAULT 0,
+            cards_correct INTEGER DEFAULT 0,
+            total_time_seconds INTEGER DEFAULT 0,
+            streak_day INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # Topic reviews - topic-level spaced repetition tracking
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS topic_reviews (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            subject_id INTEGER NOT NULL,
+            topic TEXT NOT NULL,
+            ease_factor REAL DEFAULT 2.5,
+            interval INTEGER DEFAULT 1,
+            repetitions INTEGER DEFAULT 0,
+            next_review DATE NOT NULL,
+            last_reviewed_at TIMESTAMP,
+            times_reviewed INTEGER DEFAULT 0,
+            avg_quiz_score REAL DEFAULT 0,
+            importance_level TEXT DEFAULT 'medium',
+            source TEXT DEFAULT 'manual',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (subject_id) REFERENCES subjects(id),
+            UNIQUE(subject_id, topic)
+        )
+    """)
+
+    # Index for efficient topic lookups
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_topic_reviews_next
+        ON topic_reviews(next_review)
+    """)
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_topic_reviews_subject
+        ON topic_reviews(subject_id)
+    """)
+
+    # Notification settings - configurable notification preferences
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS notification_settings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            setting_key TEXT NOT NULL UNIQUE,
+            setting_value TEXT,
+            enabled INTEGER DEFAULT 1,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # Index for efficient card_reviews date lookups
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_card_reviews_date
+        ON card_reviews(date(reviewed_at))
+    """)
+
     conn.commit()
     conn.close()
 
@@ -1300,6 +1365,614 @@ def get_review_history(days: int = 7) -> list:
     history = cursor.fetchall()
     conn.close()
     return rows_to_dicts(history)
+
+
+# =============================================================================
+# SRS ANALYTICS FUNCTIONS
+# =============================================================================
+
+def get_retention_rate_over_time(days: int = 30) -> list:
+    """Calculate retention rate (% correct) for each day over the past N days."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT
+            date(reviewed_at) as review_date,
+            COUNT(*) as total_reviews,
+            SUM(CASE WHEN quality >= 3 THEN 1 ELSE 0 END) as correct_reviews,
+            ROUND(100.0 * SUM(CASE WHEN quality >= 3 THEN 1 ELSE 0 END) / COUNT(*), 1) as retention_rate
+        FROM card_reviews
+        WHERE reviewed_at >= date('now', ? || ' days')
+        GROUP BY date(reviewed_at)
+        ORDER BY review_date ASC
+    """, (f'-{days}',))
+    result = rows_to_dicts(cursor.fetchall())
+    conn.close()
+    return result
+
+
+def get_forgetting_curve_data() -> list:
+    """Get success rate by interval bucket for forgetting curve visualization."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT
+            CASE
+                WHEN interval_before <= 1 THEN '1 day'
+                WHEN interval_before <= 3 THEN '2-3 days'
+                WHEN interval_before <= 7 THEN '4-7 days'
+                WHEN interval_before <= 14 THEN '8-14 days'
+                WHEN interval_before <= 30 THEN '15-30 days'
+                ELSE '30+ days'
+            END as interval_bucket,
+            CASE
+                WHEN interval_before <= 1 THEN 1
+                WHEN interval_before <= 3 THEN 2
+                WHEN interval_before <= 7 THEN 3
+                WHEN interval_before <= 14 THEN 4
+                WHEN interval_before <= 30 THEN 5
+                ELSE 6
+            END as bucket_order,
+            COUNT(*) as total,
+            SUM(CASE WHEN quality >= 3 THEN 1 ELSE 0 END) as correct,
+            ROUND(100.0 * SUM(CASE WHEN quality >= 3 THEN 1 ELSE 0 END) / COUNT(*), 1) as success_rate
+        FROM card_reviews
+        WHERE interval_before IS NOT NULL
+        GROUP BY interval_bucket
+        ORDER BY bucket_order
+    """)
+    result = rows_to_dicts(cursor.fetchall())
+    conn.close()
+    return result
+
+
+def get_review_forecast(days: int = 30) -> list:
+    """Predict how many cards will be due each day for the next N days."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT
+            next_review as due_date,
+            COUNT(*) as cards_due
+        FROM flashcards
+        WHERE next_review BETWEEN date('now') AND date('now', ? || ' days')
+        GROUP BY next_review
+        ORDER BY next_review ASC
+    """, (f'+{days}',))
+    result = rows_to_dicts(cursor.fetchall())
+    conn.close()
+    return result
+
+
+def get_review_streak() -> dict:
+    """Get current and longest review streak information."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    # Get all distinct review dates in descending order
+    cursor.execute("""
+        SELECT DISTINCT date(reviewed_at) as review_date
+        FROM card_reviews
+        ORDER BY review_date DESC
+    """)
+    review_dates = [row['review_date'] for row in cursor.fetchall()]
+
+    if not review_dates:
+        conn.close()
+        return {'current_streak': 0, 'longest_streak': 0, 'last_review_date': None}
+
+    # Calculate current streak
+    current_streak = 0
+    today = date.today().isoformat()
+    yesterday = (date.today() - timedelta(days=1)).isoformat()
+
+    # Check if reviewed today or yesterday to continue streak
+    if review_dates and (review_dates[0] == today or review_dates[0] == yesterday):
+        check_date = date.fromisoformat(review_dates[0])
+        for review_date in review_dates:
+            if date.fromisoformat(review_date) == check_date:
+                current_streak += 1
+                check_date -= timedelta(days=1)
+            else:
+                break
+
+    # Calculate longest streak
+    longest_streak = 0
+    if review_dates:
+        streak = 1
+        for i in range(1, len(review_dates)):
+            prev_date = date.fromisoformat(review_dates[i-1])
+            curr_date = date.fromisoformat(review_dates[i])
+            if prev_date - curr_date == timedelta(days=1):
+                streak += 1
+            else:
+                longest_streak = max(longest_streak, streak)
+                streak = 1
+        longest_streak = max(longest_streak, streak)
+
+    conn.close()
+    return {
+        'current_streak': current_streak,
+        'longest_streak': max(longest_streak, current_streak),
+        'last_review_date': review_dates[0] if review_dates else None
+    }
+
+
+def get_srs_performance_by_subject() -> list:
+    """Get flashcard performance metrics grouped by subject."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT
+            s.id as subject_id,
+            s.name as subject_name,
+            s.colour as subject_colour,
+            COUNT(DISTINCT f.id) as total_cards,
+            COUNT(DISTINCT CASE WHEN f.next_review <= date('now') THEN f.id END) as due_cards,
+            COALESCE(AVG(f.ease_factor), 2.5) as avg_ease,
+            COALESCE(
+                100.0 * SUM(CASE WHEN cr.quality >= 3 THEN 1 ELSE 0 END) / NULLIF(COUNT(cr.id), 0),
+                0
+            ) as accuracy,
+            COUNT(cr.id) as total_reviews
+        FROM subjects s
+        LEFT JOIN flashcards f ON f.subject_id = s.id
+        LEFT JOIN card_reviews cr ON cr.flashcard_id = f.id
+        GROUP BY s.id
+        HAVING total_cards > 0
+        ORDER BY total_cards DESC
+    """)
+    result = rows_to_dicts(cursor.fetchall())
+    conn.close()
+    return result
+
+
+def get_card_maturity_distribution() -> dict:
+    """Get count of cards by maturity stage."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT
+            COUNT(CASE WHEN times_reviewed = 0 THEN 1 END) as new_cards,
+            COUNT(CASE WHEN times_reviewed > 0 AND interval < 7 THEN 1 END) as learning,
+            COUNT(CASE WHEN interval >= 7 AND interval < 21 THEN 1 END) as young,
+            COUNT(CASE WHEN interval >= 21 THEN 1 END) as mature,
+            COUNT(*) as total
+        FROM flashcards
+    """)
+    result = row_to_dict(cursor.fetchone())
+    conn.close()
+    return result or {'new_cards': 0, 'learning': 0, 'young': 0, 'mature': 0, 'total': 0}
+
+
+def get_average_review_time_trend(days: int = 14) -> list:
+    """Get average time per card over the past N days."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT
+            date(reviewed_at) as review_date,
+            ROUND(AVG(time_taken_seconds), 1) as avg_time_seconds,
+            COUNT(*) as cards_reviewed
+        FROM card_reviews
+        WHERE reviewed_at >= date('now', ? || ' days')
+          AND time_taken_seconds IS NOT NULL
+          AND time_taken_seconds > 0
+        GROUP BY date(reviewed_at)
+        ORDER BY review_date ASC
+    """, (f'-{days}',))
+    result = rows_to_dicts(cursor.fetchall())
+    conn.close()
+    return result
+
+
+def get_review_heatmap_data(weeks: int = 12) -> list:
+    """Get review activity data for calendar heatmap (GitHub-style)."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    days = weeks * 7
+    cursor.execute("""
+        SELECT
+            date(reviewed_at) as review_date,
+            COUNT(*) as review_count
+        FROM card_reviews
+        WHERE reviewed_at >= date('now', ? || ' days')
+        GROUP BY date(reviewed_at)
+        ORDER BY review_date ASC
+    """, (f'-{days}',))
+
+    reviews = {row['review_date']: row['review_count'] for row in cursor.fetchall()}
+
+    # Find max for intensity calculation
+    max_count = max(reviews.values()) if reviews else 1
+
+    # Build heatmap data for all days
+    result = []
+    start_date = date.today() - timedelta(days=days)
+    for i in range(days + 1):
+        d = start_date + timedelta(days=i)
+        d_str = d.isoformat()
+        count = reviews.get(d_str, 0)
+        # Calculate intensity level 0-4
+        if count == 0:
+            level = 0
+        elif count <= max_count * 0.25:
+            level = 1
+        elif count <= max_count * 0.5:
+            level = 2
+        elif count <= max_count * 0.75:
+            level = 3
+        else:
+            level = 4
+        result.append({
+            'date': d_str,
+            'count': count,
+            'level': level,
+            'weekday': d.weekday()
+        })
+
+    conn.close()
+    return result
+
+
+def record_daily_activity():
+    """Update review_activity table with today's stats (called after reviews)."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    today = date.today().isoformat()
+
+    # Get today's stats from card_reviews
+    cursor.execute("""
+        SELECT
+            COUNT(*) as total,
+            SUM(CASE WHEN quality >= 3 THEN 1 ELSE 0 END) as correct,
+            COALESCE(SUM(time_taken_seconds), 0) as time_total
+        FROM card_reviews
+        WHERE date(reviewed_at) = date('now')
+    """)
+    stats = cursor.fetchone()
+
+    # Calculate streak
+    streak_info = get_review_streak()
+
+    # Upsert into review_activity
+    cursor.execute("""
+        INSERT INTO review_activity (activity_date, cards_reviewed, cards_correct, total_time_seconds, streak_day)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(activity_date) DO UPDATE SET
+            cards_reviewed = excluded.cards_reviewed,
+            cards_correct = excluded.cards_correct,
+            total_time_seconds = excluded.total_time_seconds,
+            streak_day = excluded.streak_day
+    """, (today, stats['total'], stats['correct'], stats['time_total'], streak_info['current_streak']))
+
+    conn.commit()
+    conn.close()
+
+
+def get_overdue_flashcards_count() -> int:
+    """Get count of cards that are overdue (past their next_review date)."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT COUNT(*) as count
+        FROM flashcards
+        WHERE next_review < date('now')
+    """)
+    result = cursor.fetchone()
+    conn.close()
+    return result['count'] if result else 0
+
+
+def get_weekly_srs_summary() -> dict:
+    """Get SRS performance summary for the past week."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT
+            COUNT(*) as cards_reviewed,
+            SUM(CASE WHEN quality >= 3 THEN 1 ELSE 0 END) as correct,
+            COALESCE(SUM(time_taken_seconds), 0) as total_time_seconds
+        FROM card_reviews
+        WHERE reviewed_at >= date('now', '-7 days')
+    """)
+    result = cursor.fetchone()
+    conn.close()
+
+    cards = result['cards_reviewed'] if result else 0
+    correct = result['correct'] if result else 0
+    time_secs = result['total_time_seconds'] if result else 0
+
+    return {
+        'cards_reviewed': cards,
+        'correct': correct,
+        'accuracy': round(100.0 * correct / cards, 1) if cards > 0 else 0,
+        'time_spent_mins': round(time_secs / 60, 1) if time_secs else 0
+    }
+
+
+def get_srs_notification_data() -> dict:
+    """Get all data needed for SRS notifications."""
+    due_count = get_due_flashcards_count()
+    overdue_count = get_overdue_flashcards_count()
+    streak = get_review_streak()
+    weekly = get_weekly_srs_summary()
+
+    return {
+        'cards_due': due_count,
+        'cards_overdue': overdue_count,
+        'streak': streak['current_streak'],
+        'longest_streak': streak['longest_streak'],
+        'weekly_stats': weekly
+    }
+
+
+# =============================================================================
+# TOPIC SRS FUNCTIONS
+# =============================================================================
+
+def add_topic_for_review(subject_id: int, topic: str, importance: str = 'medium',
+                         source: str = 'manual') -> int:
+    """Add or update a topic for spaced repetition tracking."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    today = date.today().isoformat()
+
+    cursor.execute("""
+        INSERT INTO topic_reviews (subject_id, topic, importance_level, source, next_review)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(subject_id, topic) DO UPDATE SET
+            importance_level = COALESCE(excluded.importance_level, importance_level),
+            source = COALESCE(excluded.source, source),
+            updated_at = CURRENT_TIMESTAMP
+    """, (subject_id, topic, importance, source, today))
+
+    conn.commit()
+    topic_id = cursor.lastrowid
+    conn.close()
+    return topic_id
+
+
+def get_due_topics(subject_id: int = None, limit: int = 10) -> list:
+    """Get topics that are due for review today or earlier."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    if subject_id:
+        cursor.execute("""
+            SELECT tr.*, s.name as subject_name, s.colour as subject_colour
+            FROM topic_reviews tr
+            JOIN subjects s ON tr.subject_id = s.id
+            WHERE tr.next_review <= date('now')
+              AND tr.subject_id = ?
+            ORDER BY tr.next_review ASC, tr.ease_factor ASC
+            LIMIT ?
+        """, (subject_id, limit))
+    else:
+        cursor.execute("""
+            SELECT tr.*, s.name as subject_name, s.colour as subject_colour
+            FROM topic_reviews tr
+            JOIN subjects s ON tr.subject_id = s.id
+            WHERE tr.next_review <= date('now')
+            ORDER BY tr.next_review ASC, tr.ease_factor ASC
+            LIMIT ?
+        """, (limit,))
+
+    result = rows_to_dicts(cursor.fetchall())
+    conn.close()
+    return result
+
+
+def review_topic(topic_id: int, quiz_score: float, time_spent_minutes: int = None):
+    """Update topic after a review/quiz session using SM-2 algorithm.
+    quiz_score should be 0-100, will be mapped to 0-5 quality."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    # Map quiz score (0-100) to quality (0-5)
+    if quiz_score >= 90:
+        quality = 5
+    elif quiz_score >= 80:
+        quality = 4
+    elif quiz_score >= 60:
+        quality = 3
+    elif quiz_score >= 40:
+        quality = 2
+    elif quiz_score >= 20:
+        quality = 1
+    else:
+        quality = 0
+
+    # Get current topic data
+    cursor.execute("SELECT * FROM topic_reviews WHERE id = ?", (topic_id,))
+    topic = cursor.fetchone()
+
+    if not topic:
+        conn.close()
+        return
+
+    # Apply SM-2 algorithm
+    ease_factor = topic['ease_factor']
+    interval = topic['interval']
+    repetitions = topic['repetitions']
+
+    if quality < 3:
+        # Failed - reset
+        repetitions = 0
+        interval = 1
+    else:
+        # Passed
+        if repetitions == 0:
+            interval = 1
+        elif repetitions == 1:
+            interval = 6
+        else:
+            interval = int(interval * ease_factor)
+        repetitions += 1
+
+    # Update ease factor
+    ease_factor = ease_factor + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02))
+    ease_factor = max(1.3, ease_factor)
+
+    # Calculate next review date
+    next_review = (date.today() + timedelta(days=interval)).isoformat()
+
+    # Calculate running average of quiz scores
+    times_reviewed = topic['times_reviewed'] + 1
+    prev_avg = topic['avg_quiz_score'] or 0
+    new_avg = ((prev_avg * (times_reviewed - 1)) + quiz_score) / times_reviewed
+
+    # Update topic
+    cursor.execute("""
+        UPDATE topic_reviews SET
+            ease_factor = ?,
+            interval = ?,
+            repetitions = ?,
+            next_review = ?,
+            last_reviewed_at = CURRENT_TIMESTAMP,
+            times_reviewed = ?,
+            avg_quiz_score = ?
+        WHERE id = ?
+    """, (ease_factor, interval, repetitions, next_review, times_reviewed, new_avg, topic_id))
+
+    conn.commit()
+    conn.close()
+
+
+def sync_topics_from_flashcards():
+    """Auto-populate topic_reviews from flashcard topics."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    # Get distinct topics from flashcards that aren't already in topic_reviews
+    cursor.execute("""
+        SELECT DISTINCT f.subject_id, f.topic
+        FROM flashcards f
+        WHERE f.topic IS NOT NULL
+          AND f.topic != ''
+          AND NOT EXISTS (
+              SELECT 1 FROM topic_reviews tr
+              WHERE tr.subject_id = f.subject_id AND tr.topic = f.topic
+          )
+    """)
+
+    topics = cursor.fetchall()
+    today = date.today().isoformat()
+
+    for topic in topics:
+        cursor.execute("""
+            INSERT INTO topic_reviews (subject_id, topic, source, next_review)
+            VALUES (?, ?, 'flashcard', ?)
+        """, (topic['subject_id'], topic['topic'], today))
+
+    conn.commit()
+    conn.close()
+    return len(topics)
+
+
+def get_topic_review_recommendations(limit: int = 5) -> list:
+    """Get prioritized list of topics to review based on multiple factors."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    # Calculate priority score based on:
+    # - Days overdue (higher = more urgent)
+    # - Lower ease factor (harder topics)
+    # - Lower avg_quiz_score
+    # - Higher importance level
+    cursor.execute("""
+        SELECT
+            tr.*,
+            s.name as subject_name,
+            s.colour as subject_colour,
+            julianday('now') - julianday(tr.next_review) as days_overdue,
+            e.exam_date,
+            CASE WHEN e.exam_date IS NOT NULL
+                 THEN julianday(e.exam_date) - julianday('now')
+                 ELSE 999 END as days_to_exam,
+            CASE
+                WHEN tr.importance_level = 'critical' THEN 4
+                WHEN tr.importance_level = 'high' THEN 3
+                WHEN tr.importance_level = 'medium' THEN 2
+                ELSE 1
+            END as importance_score
+        FROM topic_reviews tr
+        JOIN subjects s ON tr.subject_id = s.id
+        LEFT JOIN exams e ON e.subject_id = s.id AND e.exam_date >= date('now')
+        WHERE tr.next_review <= date('now')
+        ORDER BY
+            days_overdue DESC,
+            importance_score DESC,
+            tr.ease_factor ASC,
+            days_to_exam ASC
+        LIMIT ?
+    """, (limit,))
+
+    result = rows_to_dicts(cursor.fetchall())
+    conn.close()
+    return result
+
+
+def get_topics_due_count() -> int:
+    """Get count of topics due for review."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT COUNT(*) as count
+        FROM topic_reviews
+        WHERE next_review <= date('now')
+    """)
+    result = cursor.fetchone()
+    conn.close()
+    return result['count'] if result else 0
+
+
+# =============================================================================
+# NOTIFICATION SETTINGS FUNCTIONS
+# =============================================================================
+
+def get_notification_setting(key: str, default: str = None) -> tuple:
+    """Get a notification setting value and enabled status."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT setting_value, enabled FROM notification_settings WHERE setting_key = ?",
+        (key,)
+    )
+    result = cursor.fetchone()
+    conn.close()
+
+    if result:
+        return (result['setting_value'], bool(result['enabled']))
+    return (default, True)
+
+
+def set_notification_setting(key: str, value: str, enabled: bool = True):
+    """Set a notification setting."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO notification_settings (setting_key, setting_value, enabled, updated_at)
+        VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(setting_key) DO UPDATE SET
+            setting_value = excluded.setting_value,
+            enabled = excluded.enabled,
+            updated_at = CURRENT_TIMESTAMP
+    """, (key, value, 1 if enabled else 0))
+    conn.commit()
+    conn.close()
+
+
+def get_all_notification_settings() -> dict:
+    """Get all notification settings as a dictionary."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT setting_key, setting_value, enabled FROM notification_settings")
+    results = cursor.fetchall()
+    conn.close()
+
+    return {row['setting_key']: {'value': row['setting_value'], 'enabled': bool(row['enabled'])}
+            for row in results}
 
 
 # =============================================================================

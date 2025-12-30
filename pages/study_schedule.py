@@ -111,6 +111,10 @@ def _render_what_next_tab(api_key: str):
         - Created flashcards for revision
         """)
 
+    # Topics Due for Review (SRS)
+    st.markdown("---")
+    _render_topics_due_section()
+
 
 def _render_recommendation_card(rec: dict, is_top: bool = False):
     """Render a recommendation card."""
@@ -636,3 +640,68 @@ def _render_adjustments_tab():
                         st.json({"New": new})
                     except json.JSONDecodeError:
                         st.text(f"New: {adj['new_value']}")
+
+
+def _render_topics_due_section():
+    """Render the Topics Due for Review section using SRS."""
+    st.markdown("### 📚 Topics Due for Review")
+    st.caption("Topics tracked with spaced repetition that need attention")
+
+    # Get topic recommendations
+    due_topics = db.get_topic_review_recommendations(limit=5)
+
+    if due_topics:
+        for topic in due_topics:
+            colour = topic.get('subject_colour', '#3498db')
+            days_overdue = int(topic.get('days_overdue', 0))
+            avg_score = topic.get('avg_quiz_score', 0)
+            importance = topic.get('importance_level', 'medium')
+
+            # Urgency indicator
+            if days_overdue > 7:
+                urgency_color = "#e74c3c"
+                urgency_label = "OVERDUE"
+            elif days_overdue > 0:
+                urgency_color = "#f39c12"
+                urgency_label = f"{days_overdue}d overdue"
+            else:
+                urgency_color = "#3498db"
+                urgency_label = "Due today"
+
+            st.markdown(f"""
+            <div style="background: {colour}11;
+                        border-left: 4px solid {colour};
+                        padding: 12px 15px;
+                        border-radius: 0 8px 8px 0;
+                        margin-bottom: 8px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-weight: bold; color: {colour};">{topic['subject_name']}</span>
+                    <span style="background: {urgency_color}; color: white; padding: 2px 8px;
+                                border-radius: 12px; font-size: 11px;">{urgency_label}</span>
+                </div>
+                <h4 style="margin: 5px 0; color: #333;">{topic['topic']}</h4>
+                <p style="margin: 5px 0; color: #666; font-size: 13px;">
+                    {f"Avg score: {avg_score:.0f}% | " if avg_score else ""}
+                    Importance: {importance.title()}
+                    {f" | Exam in {int(topic['days_to_exam'])} days" if topic.get('days_to_exam') and topic['days_to_exam'] < 999 else ""}
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+
+        # Sync button
+        st.markdown("---")
+        if st.button("🔄 Sync Topics from Flashcards", key="sync_topics_schedule"):
+            count = db.sync_topics_from_flashcards()
+            if count > 0:
+                st.success(f"Synced {count} new topics!")
+                st.rerun()
+            else:
+                st.info("All topics already synced.")
+    else:
+        st.success("No topics due for review right now!")
+        st.markdown("""
+        **Topics are added when you:**
+        - Create flashcards with topics
+        - Complete knowledge gap assessments
+        - Add them manually in SRS Settings
+        """)

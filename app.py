@@ -12,7 +12,7 @@ from pages import (
     dashboard, ai_tools, bubble_ace, study_schedule,
     homework, exams, flashcards, notes,
     past_papers, focus_timer, subjects, statistics, settings,
-    knowledge_gaps
+    knowledge_gaps, srs_analytics
 )
 
 
@@ -89,6 +89,7 @@ with st.sidebar:
             "Homework",
             "Exams",
             "Flashcards",
+            "SRS Analytics",
             "Notes",
             "Past Papers",
             "Focus Timer",
@@ -128,6 +129,7 @@ PAGE_MODULES = {
     "Homework": homework,
     "Exams": exams,
     "Flashcards": flashcards,
+    "SRS Analytics": srs_analytics,
     "Notes": notes,
     "Past Papers": past_papers,
     "Focus Timer": focus_timer,
