@@ -11,7 +11,7 @@ from utils import call_claude_chat_with_rag, CLAUDE_MODELS, DEFAULT_MODEL
 def render():
     """Render the Bubble Ace chatbot page."""
     st.title("🫧 Bubble Ace")
-    st.markdown("Your AI study buddy! Ask me anything about your studies.")
+    st.markdown("Your AI study buddy! Ask questions, get explanations, or request quizzes on any topic.")
 
     # Session state setup
     if 'bubble_ace_api_key' not in st.session_state:
@@ -104,20 +104,21 @@ def render():
                 st.session_state.chat_history = []
                 st.rerun()
 
-    # Quick actions
-    st.markdown("**Quick actions:**")
+    # Quick actions - prominent section
+    st.markdown("### ⚡ Quick Actions")
+    st.caption("Click a button to start, then complete your question below.")
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        if st.button("📝 Explain a topic"):
+        if st.button("📝 Explain", use_container_width=True, help="Get a clear explanation of any topic"):
             st.session_state.quick_prompt = "Can you explain "
     with col2:
-        if st.button("❓ Quiz me"):
+        if st.button("❓ Quiz me", use_container_width=True, help="Test your knowledge with questions"):
             st.session_state.quick_prompt = "Quiz me on "
     with col3:
-        if st.button("📚 Study tips"):
+        if st.button("📚 Study tips", use_container_width=True, help="Get study advice for a topic"):
             st.session_state.quick_prompt = "Give me study tips for "
     with col4:
-        if st.button("✍️ Essay help"):
+        if st.button("✍️ Essay help", use_container_width=True, help="Plan and structure an essay"):
             st.session_state.quick_prompt = "Help me plan an essay about "
 
     # Chat display

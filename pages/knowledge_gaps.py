@@ -17,7 +17,7 @@ def render():
 
     subjects = db.get_all_subjects()
     if not subjects:
-        st.warning("Please add subjects first in the Subjects page.")
+        st.warning("Add your subjects first in **Subjects** (under Settings) to start assessing knowledge gaps.")
         st.stop()
 
     # Check for API key
@@ -116,7 +116,7 @@ def _render_assessment_tab(subjects, api_key):
                 st.session_state.assessment_start_time = time.time()
                 st.rerun()
             else:
-                st.error("Failed to create assessment. Please try again.")
+                st.error("Couldn't create assessment. Check your API key in **Settings** and ensure you have an internet connection.")
 
     # Recent assessments
     st.markdown("---")
@@ -337,7 +337,7 @@ def _render_gap_analysis_tab(subjects, api_key):
             if analysis:
                 st.markdown(analysis)
             else:
-                st.error("Failed to generate analysis. Please try again.")
+                st.error("Couldn't generate analysis. Check your API key in **Settings** and try again.")
 
 
 def _render_progress_report_tab(subjects):

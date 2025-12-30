@@ -12,10 +12,11 @@ from utils import format_due_date, days_until
 def render():
     """Render the Homework tracking page."""
     st.title("📝 Homework Tracker")
+    st.markdown("Track your homework assignments and never miss a deadline.")
 
     subjects = db.get_all_subjects()
     if not subjects:
-        st.warning("Please add subjects first in the Subjects page.")
+        st.warning("Add your subjects first in **Subjects** (under Settings) to start tracking homework.")
         st.stop()
 
     tab1, tab2, tab3 = st.tabs(["📋 All Homework", "➕ Add New", "✅ Completed"])
@@ -99,10 +100,10 @@ def render():
                         due_date=due_date.isoformat(),
                         priority=priority
                     )
-                    st.success(f"Added: {title}")
+                    st.success(f"✓ Added '{title}' to your homework list!")
                     st.rerun()
                 else:
-                    st.error("Please enter a title")
+                    st.error("Please enter a title for your homework.")
 
     # TAB 3: Completed
     with tab3:

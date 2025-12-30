@@ -221,7 +221,7 @@ def _render_practice_setup(api_key: str):
 
             st.rerun()
         else:
-            st.error("Failed to generate questions. Please try again.")
+            st.error("Couldn't generate practice questions. Check your API key in **Settings** and try again with fewer questions.")
 
 
 def _generate_practice_questions(api_key: str, subject_id: int, num_questions: int, question_types: str) -> list:
@@ -280,7 +280,7 @@ Respond in JSON format:
         data = json.loads(json_str.strip())
         return data.get('questions', [])
     except Exception as e:
-        st.error(f"Error generating questions: {e}")
+        st.error(f"Couldn't generate questions: {e}. Try selecting fewer questions or a different question type.")
         return []
 
 

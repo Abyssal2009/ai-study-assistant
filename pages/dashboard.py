@@ -14,10 +14,19 @@ def render():
     st.title("📊 Dashboard")
     st.markdown(f"**Today is {date.today().strftime('%A, %d %B %Y')}**")
 
-    # Check if subjects exist
+    # Check if subjects exist - friendly onboarding
     subjects = db.get_all_subjects()
     if not subjects:
-        st.warning("👋 **Welcome!** You haven't added any subjects yet. Go to the **Subjects** page to add your GCSE subjects first.")
+        st.markdown("""
+        ### 👋 Welcome to Study Assistant!
+
+        Get started in 3 easy steps:
+        1. **Add your subjects** - Go to **Subjects** (under Settings) to add your GCSE subjects
+        2. **Add homework & exams** - Track deadlines and exam dates
+        3. **Create flashcards** - Build your revision materials
+
+        Your personalised dashboard will appear here once you add your first subject.
+        """)
         st.stop()
 
     # TOP RECOMMENDATION - What should I study next?
@@ -152,8 +161,10 @@ def render():
                 </div>
                 """, unsafe_allow_html=True)
 
-            if st.button("Start Review", key="dash_review"):
-                st.info("Go to Flashcards page to review")
+            if st.button("🎯 Start Review", key="dash_review", type="primary"):
+                st.session_state.selected_page = "Flashcards"
+                st.session_state.review_mode = True
+                st.rerun()
         else:
             st.markdown("""
             <div class="success-msg">All caught up!</div>

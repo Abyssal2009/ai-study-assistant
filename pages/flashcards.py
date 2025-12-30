@@ -10,10 +10,11 @@ import database as db
 def render():
     """Render the Flashcards page."""
     st.title("🃏 Flashcards")
+    st.markdown("Create and review flashcards using spaced repetition for better memory retention.")
 
     subjects = db.get_all_subjects()
     if not subjects:
-        st.warning("Please add subjects first in the Subjects page.")
+        st.warning("Add your subjects first in **Subjects** (under Settings) to start creating flashcards.")
         st.stop()
 
     # Session state for review
@@ -130,9 +131,9 @@ def render():
                 options=subjects,
                 format_func=lambda x: x['name']
             )
-            topic = st.text_input("Topic (optional)", placeholder="e.g., Cell Biology")
-            question = st.text_area("Question *", placeholder="What is the question?")
-            answer = st.text_area("Answer *", placeholder="What is the answer?")
+            topic = st.text_input("Topic (optional)", placeholder="e.g., Cell Biology, Photosynthesis")
+            question = st.text_area("Question *", placeholder="e.g., What is the function of mitochondria?")
+            answer = st.text_area("Answer *", placeholder="e.g., Mitochondria are the powerhouse of the cell, producing ATP through cellular respiration.")
 
             if st.form_submit_button("Add Flashcard", type="primary"):
                 if question and answer:
@@ -142,10 +143,10 @@ def render():
                         answer=answer,
                         topic=topic
                     )
-                    st.success("Flashcard added!")
+                    st.success("✓ Flashcard added! Add another or switch to the Review tab.")
                     st.rerun()
                 else:
-                    st.error("Please fill in both question and answer")
+                    st.error("Please fill in both the question and answer fields.")
 
     # TAB 3: All Cards
     with tab3:

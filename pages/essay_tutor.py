@@ -213,9 +213,9 @@ Be specific and constructive. Reference actual parts of the essay in your feedba
             st.success("Essay graded successfully!")
             st.rerun()
 
-        except json.JSONDecodeError as e:
-            st.error(f"Failed to parse AI response. Please try again.")
-            with st.expander("Raw response"):
+        except json.JSONDecodeError:
+            st.error("Couldn't process the AI response. Try submitting a shorter essay or check your API key in **Settings**.")
+            with st.expander("View raw response"):
                 st.code(result)
 
 

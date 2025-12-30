@@ -24,11 +24,11 @@ def render():
     # Get API key for AI features
     api_key = st.session_state.get('bubble_ace_api_key', '')
 
-    # Main tabs
+    # Main tabs with descriptions
     tab1, tab2, tab3, tab4 = st.tabs([
         "🎯 What Next?",
         "📅 My Schedule",
-        "🔧 Generate New",
+        "⚡ Generate New",
         "📊 Adjustments"
     ])
 
@@ -52,6 +52,7 @@ def render():
 def _render_what_next_tab(api_key: str):
     """Render the What Next? smart recommendation tab."""
     st.markdown("### 🎯 What Should I Study Now?")
+    st.caption("AI-powered recommendations based on your exams, knowledge gaps, and review schedule.")
 
     # Time selector
     col1, col2 = st.columns([2, 3])
@@ -84,11 +85,15 @@ def _render_what_next_tab(api_key: str):
                 st.info(f"Ready to start a {rec['estimated_minutes']}-minute session on {rec['topic']}")
         with col2:
             if rec['action_type'] == 'flashcard_review':
-                if st.button("📚 Go to Flashcards", key="go_flashcards"):
-                    st.info("Navigate to Flashcards page to review")
+                if st.button("📚 Start Flashcard Review", key="go_flashcards"):
+                    st.session_state.selected_page = "Flashcards"
+                    st.session_state.review_mode = True
+                    st.rerun()
             else:
-                if st.button("📝 View Notes", key="view_notes"):
-                    st.info(f"Search notes for: {rec['topic']}")
+                if st.button("📝 Open Notes", key="view_notes"):
+                    st.session_state.selected_page = "Notes"
+                    st.session_state.notes_search = rec['topic']
+                    st.rerun()
         with col3:
             if api_key and st.button("🤖 Get AI Study Tips", key="ai_tips"):
                 _get_ai_study_tips(api_key, rec)
@@ -184,6 +189,7 @@ Focus on active learning techniques suitable for GCSE level."""
 def _render_schedule_tab():
     """Render the My Schedule tab."""
     st.markdown("### 📅 My Study Schedule")
+    st.caption("View and manage your planned study sessions.")
 
     schedule = db.get_active_schedule()
 
@@ -392,7 +398,7 @@ def _render_session_card(session: dict, compact: bool = False):
             with col1:
                 if st.button("✅ Done", key=f"complete_{session['id']}"):
                     db.mark_session_complete(session['id'], session['duration_minutes'])
-                    st.success("Session completed!")
+                    st.success("✓ Session completed! Great work!")
                     st.rerun()
             with col2:
                 if st.button("⏭️ Skip", key=f"skip_{session['id']}"):
@@ -439,7 +445,8 @@ def _export_schedule_csv(schedule_id: int):
 
 def _render_generate_tab(subjects: list, api_key: str):
     """Render the Generate New schedule tab."""
-    st.markdown("### 🔧 Generate New Schedule")
+    st.markdown("### ⚡ Generate New Schedule")
+    st.caption("Create a personalised study plan based on your exams and knowledge gaps.")
 
     # Check if there's an active schedule
     active = db.get_active_schedule()
@@ -555,7 +562,7 @@ def _render_generate_tab(subjects: list, api_key: str):
                     subject_ids=selected_subject_ids
                 )
 
-                st.success(f"Schedule created with {sessions_created} sessions!")
+                st.success(f"✓ Schedule created with {sessions_created} sessions! Check the 'My Schedule' tab to view it.")
                 st.balloons()
                 st.rerun()
 
@@ -570,7 +577,7 @@ def _render_generate_tab(subjects: list, api_key: str):
 def _render_adjustments_tab():
     """Render the Adjustments change log tab."""
     st.markdown("### 📊 Schedule Adjustments")
-    st.markdown("See what changed in your schedule and why.")
+    st.caption("Your schedule adapts automatically - see what changed and why.")
 
     schedule = db.get_active_schedule()
 

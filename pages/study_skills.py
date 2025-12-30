@@ -292,7 +292,7 @@ Always be encouraging - students should feel motivated to improve, not discourag
 
         return json.loads(json_str.strip())
     except Exception as e:
-        st.error(f"Error evaluating notes: {e}")
+        st.error(f"Couldn't evaluate notes: {e}. Check your API key in **Settings** and try again.")
         return None
 
 

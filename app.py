@@ -83,37 +83,48 @@ if 'technique_questions' not in st.session_state:
 
 
 # =============================================================================
-# SIDEBAR - NAVIGATION
+# SIDEBAR - NAVIGATION (Grouped for easier navigation)
 # =============================================================================
+
+# Define navigation groups for better UX
+NAV_GROUPS = {
+    "📋 Daily Tasks": ["Dashboard", "Homework", "Focus Timer"],
+    "📚 Study Tools": ["Flashcards", "Notes", "Past Papers", "Exams"],
+    "🤖 AI Assistants": ["Bubble Ace", "AI Tools", "Essay Tutor", "Exam Technique", "Study Skills"],
+    "📊 Progress": ["Study Schedule", "Knowledge Gaps", "SRS Analytics", "Statistics"],
+    "⚙️ Settings": ["Subjects", "Settings"],
+}
+
+# Flatten for page lookup
+ALL_PAGES = [page for pages in NAV_GROUPS.values() for page in pages]
 
 with st.sidebar:
     st.title("📚 Study Assistant")
-    st.markdown("---")
 
-    page = st.radio(
-        "Navigate",
-        [
-            "Dashboard",
-            "Bubble Ace",
-            "AI Tools",
-            "Essay Tutor",
-            "Exam Technique",
-            "Study Skills",
-            "Knowledge Gaps",
-            "Study Schedule",
-            "Homework",
-            "Exams",
-            "Flashcards",
-            "SRS Analytics",
-            "Notes",
-            "Past Papers",
-            "Focus Timer",
-            "Subjects",
-            "Statistics",
-            "Settings"
-        ],
-        label_visibility="collapsed"
-    )
+    # Initialize selected page in session state
+    if 'selected_page' not in st.session_state:
+        st.session_state.selected_page = "Dashboard"
+
+    # Render grouped navigation
+    for group_name, pages in NAV_GROUPS.items():
+        st.markdown(f"**{group_name}**")
+        for page_name in pages:
+            # Highlight current page
+            is_selected = st.session_state.selected_page == page_name
+            button_type = "primary" if is_selected else "secondary"
+
+            if st.button(
+                page_name,
+                key=f"nav_{page_name}",
+                use_container_width=True,
+                type=button_type
+            ):
+                st.session_state.selected_page = page_name
+                st.rerun()
+        st.markdown("")  # Add spacing between groups
+
+    # Get current page from session state
+    page = st.session_state.selected_page
 
     st.markdown("---")
 

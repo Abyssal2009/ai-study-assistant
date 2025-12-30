@@ -11,10 +11,11 @@ from utils import days_until
 def render():
     """Render the Exams calendar page."""
     st.title("📅 Exam Calendar")
+    st.markdown("Track your exam dates with countdowns and optional Google Calendar sync.")
 
     subjects = db.get_all_subjects()
     if not subjects:
-        st.warning("Please add subjects first in the Subjects page.")
+        st.warning("Add your subjects first in **Subjects** (under Settings) to start adding exams.")
         st.stop()
 
     # Google Calendar sync status
@@ -115,7 +116,7 @@ def render():
                         duration_minutes=duration,
                         location=location
                     )
-                    st.success(f"Added: {name}")
+                    st.success(f"✓ '{name}' added to your exam calendar!")
 
                     # Auto-sync to calendar if enabled
                     if auto_sync and calendar_connected:
@@ -130,7 +131,7 @@ def render():
 
                     st.rerun()
                 else:
-                    st.error("Please enter an exam name")
+                    st.error("Please enter a name for your exam.")
 
     # TAB 3: Import from Calendar
     with tab3:
