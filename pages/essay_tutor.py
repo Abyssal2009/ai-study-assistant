@@ -219,30 +219,49 @@ Be specific and constructive. Reference actual parts of the essay in your feedba
                 st.code(result)
 
 
+def _get_score_class(score: int) -> str:
+    """Get the appropriate CSS class suffix based on score."""
+    if score >= 80:
+        return "excellent"
+    elif score >= 65:
+        return "good"
+    elif score >= 50:
+        return "average"
+    elif score >= 35:
+        return "below"
+    else:
+        return "poor"
+
+
+def _get_grade_class(grade: str) -> str:
+    """Get the appropriate CSS class suffix based on letter grade."""
+    if grade in ('A*', 'A', '9', '8'):
+        return "a"
+    elif grade in ('B', '7', '6'):
+        return "b"
+    elif grade in ('C', '5', '4'):
+        return "c"
+    elif grade in ('D', '3'):
+        return "d"
+    else:
+        return "f"
+
+
 def _display_grade_summary(feedback: dict):
     """Display the grade summary card."""
     grade = feedback.get('grade', 'N/A')
     score = feedback.get('overall_score', 0)
     summary = feedback.get('summary', '')
 
-    # Grade colour
-    grade_colors = {
-        'A*': '#27ae60', 'A': '#2ecc71', '9': '#27ae60', '8': '#2ecc71',
-        'B': '#3498db', '7': '#3498db', '6': '#3498db',
-        'C': '#f39c12', '5': '#f39c12', '4': '#f39c12',
-        'D': '#e67e22', '3': '#e67e22',
-        'E': '#e74c3c', 'F': '#e74c3c', '2': '#e74c3c', '1': '#e74c3c',
-        'U': '#95a5a6', '0': '#95a5a6'
-    }
-    grade_color = grade_colors.get(grade, '#3498db')
+    # Get CSS classes
+    score_class = _get_score_class(score)
+    grade_class = _get_grade_class(grade)
 
     st.markdown(f"""
-    <div style="background: linear-gradient(135deg, {grade_color}22, {grade_color}11);
-                border: 2px solid {grade_color};
-                padding: 25px; border-radius: 12px; text-align: center; margin-bottom: 20px;">
-        <h1 style="font-size: 3.5rem; margin: 0; color: {grade_color};">{grade}</h1>
-        <p style="font-size: 1.3rem; margin: 10px 0; color: #333;">{score}/100</p>
-        <p style="color: #666; font-size: 0.95rem; margin-top: 15px;">{summary}</p>
+    <div class="score-card score-card-{score_class}">
+        <h1 class="score-value score-value-{score_class}">{grade}</h1>
+        <p class="score-label">{score}/100</p>
+        <p class="score-summary">{summary}</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -255,27 +274,18 @@ def _display_grade_summary(feedback: dict):
         max_val = data.get('max', 10)
         comment = data.get('comment', '')
         pct = (score_val / max_val * 100) if max_val > 0 else 0
-
-        # Colour based on percentage
-        if pct >= 80:
-            bar_color = "#2ecc71"
-        elif pct >= 60:
-            bar_color = "#3498db"
-        elif pct >= 40:
-            bar_color = "#f39c12"
-        else:
-            bar_color = "#e74c3c"
+        bar_class = _get_score_class(int(pct))
 
         st.markdown(f"""
-        <div style="margin-bottom: 15px;">
-            <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
-                <span style="font-weight: 500;">{criteria.replace('_', ' ').title()}</span>
-                <span style="font-weight: bold; color: {bar_color};">{score_val}/{max_val}</span>
+        <div class="criteria-card">
+            <div class="criteria-header">
+                <span class="criteria-name">{criteria.replace('_', ' ').title()}</span>
+                <span class="criteria-score score-value-{bar_class}">{score_val}/{max_val}</span>
             </div>
-            <div style="background: #eee; height: 10px; border-radius: 5px; overflow: hidden;">
-                <div style="background: {bar_color}; width: {pct}%; height: 100%;"></div>
+            <div class="criteria-bar">
+                <div class="criteria-bar-fill criteria-bar-fill-{bar_class}" style="width: {pct}%;"></div>
             </div>
-            <p style="font-size: 12px; color: #666; margin: 5px 0 0 0;">{comment}</p>
+            <p class="criteria-comment">{comment}</p>
         </div>
         """, unsafe_allow_html=True)
 
@@ -298,25 +308,28 @@ def _render_feedback_tab():
         strengths = section_data.get('strengths', [])
         improvements = section_data.get('improvements', [])
 
-        # Rating colours
-        rating_colors = {
-            'excellent': '#27ae60',
-            'good': '#2ecc71',
-            'adequate': '#f39c12',
-            'needs_work': '#e67e22',
-            'poor': '#e74c3c'
+        # Map rating to CSS class
+        rating_class_map = {
+            'excellent': 'success',
+            'good': 'success',
+            'adequate': 'warning',
+            'needs_work': 'warning',
+            'poor': 'error'
         }
-        rating_color = rating_colors.get(rating, '#3498db')
+        card_class = rating_class_map.get(rating, 'info')
+
+        # Map rating to badge class
+        badge_class_map = {
+            'excellent': 'a', 'good': 'b', 'adequate': 'c',
+            'needs_work': 'd', 'poor': 'f'
+        }
+        badge_class = badge_class_map.get(rating, 'b')
 
         st.markdown(f"""
-        <div style="background: {rating_color}11; border-left: 4px solid {rating_color};
-                    padding: 15px; border-radius: 0 8px 8px 0; margin-bottom: 15px;">
+        <div class="feedback-card feedback-card-{card_class}">
             <div style="display: flex; justify-content: space-between; align-items: center;">
-                <h4 style="margin: 0; color: #333;">{section_name.replace('_', ' ').title()}</h4>
-                <span style="background: {rating_color}; color: white; padding: 3px 10px;
-                            border-radius: 12px; font-size: 12px; text-transform: uppercase;">
-                    {rating.replace('_', ' ')}
-                </span>
+                <span class="feedback-title">{section_name.replace('_', ' ').title()}</span>
+                <span class="grade-badge grade-badge-{badge_class}">{rating.replace('_', ' ')}</span>
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -339,31 +352,23 @@ def _render_feedback_tab():
 
     issues = feedback.get('issues', [])
     if issues:
-        severity_colors = {
-            'high': '#e74c3c',
-            'medium': '#f39c12',
-            'low': '#3498db'
-        }
-
         for issue in issues:
             issue_type = issue.get('type', 'general')
             severity = issue.get('severity', 'medium')
             description = issue.get('description', '')
-            color = severity_colors.get(severity, '#3498db')
+
+            # Map severity to CSS classes
+            severity_map = {'high': 'error', 'medium': 'warning', 'low': 'info'}
+            card_class = severity_map.get(severity, 'info')
 
             st.markdown(f"""
-            <div style="background: {color}11; border-left: 3px solid {color};
-                        padding: 12px; margin-bottom: 10px; border-radius: 0 6px 6px 0;">
-                <div style="margin-bottom: 5px;">
-                    <span style="background: {color}; color: white; padding: 2px 8px;
-                                border-radius: 4px; font-size: 11px; text-transform: uppercase;
-                                margin-right: 8px;">{severity}</span>
-                    <span style="background: #f0f0f0; color: #666; padding: 2px 8px;
-                                border-radius: 4px; font-size: 11px; text-transform: uppercase;">
-                        {issue_type}
-                    </span>
+            <div class="improvement-item">
+                <div class="improvement-header">
+                    <span class="improvement-severity improvement-severity-{severity}"></span>
+                    <span class="improvement-area">{issue_type}</span>
+                    <span class="grade-badge grade-badge-{'f' if severity == 'high' else 'c' if severity == 'medium' else 'b'}">{severity}</span>
                 </div>
-                <p style="margin: 5px 0 0 0; color: #333;">{description}</p>
+                <p class="improvement-issue">{description}</p>
             </div>
             """, unsafe_allow_html=True)
     else:
@@ -375,18 +380,13 @@ def _render_feedback_tab():
 
     suggestions = feedback.get('actionable_suggestions', [])
     if suggestions:
-        for i, suggestion in enumerate(suggestions, 1):
-            st.markdown(f"""
-            <div style="background: #f8f9fa; padding: 12px 15px; margin-bottom: 8px;
-                        border-radius: 8px; display: flex; align-items: flex-start;">
-                <span style="background: #3498db; color: white; min-width: 24px; height: 24px;
-                            border-radius: 50%; display: flex; align-items: center;
-                            justify-content: center; font-size: 12px; margin-right: 12px;">
-                    {i}
-                </span>
-                <span style="color: #333;">{suggestion}</span>
-            </div>
-            """, unsafe_allow_html=True)
+        suggestions_html = "".join([f"<li>{s}</li>" for s in suggestions])
+        st.markdown(f"""
+        <div class="next-steps">
+            <div class="next-steps-title">What to Work On</div>
+            <ol class="next-steps-list">{suggestions_html}</ol>
+        </div>
+        """, unsafe_allow_html=True)
     else:
         st.info("No specific suggestions available.")
 
@@ -425,7 +425,6 @@ def _render_history_tab():
         score = submission.get('overall_score', 0)
         title = submission.get('essay_title', 'Untitled')
         subject_name = submission.get('subject_name', 'General')
-        subject_colour = submission.get('subject_colour', '#3498db')
         word_count = submission.get('word_count', 0)
         submitted = submission.get('submitted_at', '')
 
@@ -439,36 +438,23 @@ def _render_history_tab():
         else:
             date_str = "Unknown"
 
-        # Grade colour
-        grade_colors = {
-            'A*': '#27ae60', 'A': '#2ecc71', '9': '#27ae60', '8': '#2ecc71',
-            'B': '#3498db', '7': '#3498db', '6': '#3498db',
-            'C': '#f39c12', '5': '#f39c12', '4': '#f39c12',
-            'D': '#e67e22', '3': '#e67e22',
-            'E': '#e74c3c', 'F': '#e74c3c', '2': '#e74c3c', '1': '#e74c3c'
-        }
-        grade_color = grade_colors.get(grade, '#95a5a6')
+        # Get CSS classes
+        grade_class = _get_grade_class(grade)
+        score_class = _get_score_class(score)
 
         st.markdown(f"""
-        <div style="background: #f8f9fa; border-left: 4px solid {subject_colour};
-                    padding: 15px; margin-bottom: 10px; border-radius: 0 8px 8px 0;">
+        <div class="session-card">
             <div style="display: flex; justify-content: space-between; align-items: center;">
                 <div>
-                    <strong style="font-size: 1.1rem;">{title}</strong>
-                    <span style="background: {subject_colour}; color: white; padding: 2px 8px;
-                                border-radius: 12px; font-size: 11px; margin-left: 10px;">
-                        {subject_name}
-                    </span>
+                    <strong class="technique-title">{title}</strong>
+                    <span class="status-badge status-completed">{subject_name}</span>
                 </div>
                 <div style="text-align: right;">
-                    <span style="background: {grade_color}; color: white; padding: 5px 12px;
-                                border-radius: 8px; font-weight: bold; font-size: 1.1rem;">
-                        {grade}
-                    </span>
-                    <span style="color: #666; margin-left: 10px;">{score}/100</span>
+                    <span class="grade-large grade-large-{grade_class}" style="width: 50px; height: 50px; font-size: 1.5rem;">{grade}</span>
+                    <span class="score-badge score-badge-{score_class}" style="margin-left: 10px;">{score}%</span>
                 </div>
             </div>
-            <p style="color: #666; font-size: 0.85rem; margin: 8px 0 0 0;">
+            <p class="criteria-comment" style="margin-top: 8px;">
                 {word_count} words | {date_str}
             </p>
         </div>

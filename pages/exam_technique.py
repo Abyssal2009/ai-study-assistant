@@ -324,19 +324,19 @@ def _render_active_practice(api_key: str):
     marks = current_q.get('marks', 1)
 
     type_badges = {
-        "multiple_choice": ("☑️ Multiple Choice", "#3498db"),
-        "short_answer": ("📋 Short Answer", "#27ae60"),
-        "essay": ("📄 Essay", "#9b59b6")
+        "multiple_choice": ("☑️ Multiple Choice", "good"),
+        "short_answer": ("📋 Short Answer", "excellent"),
+        "essay": ("📄 Essay", "average")
     }
-    badge_text, badge_color = type_badges.get(q_type, ("❓ Question", "#666"))
+    badge_text, badge_class = type_badges.get(q_type, ("❓ Question", "good"))
 
     st.markdown(f"""
-    <div style="background: {badge_color}11; border-left: 4px solid {badge_color};
-                padding: 15px; border-radius: 0 8px 8px 0; margin-bottom: 15px;">
-        <span style="background: {badge_color}; color: white; padding: 2px 8px;
-                    border-radius: 4px; font-size: 12px;">{badge_text}</span>
-        <span style="float: right; color: #666;">{marks} mark{"s" if marks > 1 else ""}</span>
-        <p style="font-size: 1.1em; margin: 10px 0 0 0;"><strong>{current_q['question_text']}</strong></p>
+    <div class="feedback-card feedback-card-info">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span class="grade-badge grade-badge-b">{badge_text}</span>
+            <span class="score-badge score-badge-{badge_class}">{marks} mark{"s" if marks > 1 else ""}</span>
+        </div>
+        <p class="technique-description" style="margin-top: 10px;"><strong>{current_q['question_text']}</strong></p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -390,14 +390,19 @@ def _render_timer_display(session_start: float, time_limit: int, question_start:
     session_remaining = max(0, time_limit - session_elapsed)
 
     mins, secs = divmod(session_remaining, 60)
-    color = "#27ae60" if session_remaining > time_limit * 0.2 else "#e74c3c"
+
+    # Determine timer class based on remaining time
+    if session_remaining > time_limit * 0.2:
+        timer_class = "primary"
+    elif session_remaining > time_limit * 0.1:
+        timer_class = "warning"
+    else:
+        timer_class = "danger"
 
     st.markdown(f"""
-    <div style="text-align: center; margin: 10px 0;">
-        <div style="font-size: 2.5rem; font-weight: bold; color: {color};">
-            {mins:02d}:{secs:02d}
-        </div>
-        <div style="font-size: 0.85rem; color: #666;">
+    <div class="timer-large timer-large-{timer_class}" style="margin: 10px 0;">
+        <div class="timer-value timer-value-{timer_class}">{mins:02d}:{secs:02d}</div>
+        <div class="score-label" style="margin-top: 8px;">
             This question: {question_elapsed}s | Suggested: {suggested_time}s
         </div>
     </div>
@@ -648,15 +653,22 @@ def _display_session_review(session_id: int):
 
     # Score summary
     score_pct = session['marks_achieved'] * 100 // max(session['total_marks'], 1)
-    grade_color = "#27ae60" if score_pct >= 70 else "#f39c12" if score_pct >= 50 else "#e74c3c"
+
+    # Get CSS class based on score
+    if score_pct >= 80:
+        score_class = "excellent"
+    elif score_pct >= 65:
+        score_class = "good"
+    elif score_pct >= 50:
+        score_class = "average"
+    else:
+        score_class = "poor"
 
     st.markdown(f"""
-    <div style="background: linear-gradient(135deg, {grade_color}22, {grade_color}11);
-                border: 2px solid {grade_color}; padding: 20px; border-radius: 12px;
-                text-align: center; margin-bottom: 20px;">
-        <h1 style="font-size: 3rem; margin: 0; color: {grade_color};">{score_pct}%</h1>
-        <p style="font-size: 1.2rem; margin: 5px 0;">{session['marks_achieved']}/{session['total_marks']} marks</p>
-        <p style="color: #666;">{session['subject_name']} | {session['questions_answered']} questions</p>
+    <div class="score-card score-card-{score_class}">
+        <h1 class="score-value score-value-{score_class}">{score_pct}%</h1>
+        <p class="score-label">{session['marks_achieved']}/{session['total_marks']} marks</p>
+        <p class="score-summary">{session['subject_name']} | {session['questions_answered']} questions</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -718,12 +730,13 @@ def _display_session_review(session_id: int):
 
 def _render_technique_breakdown(assessment: dict):
     """Render technique assessment breakdown."""
-    rating_colors = {
-        "excellent": "#27ae60",
-        "good": "#2ecc71",
-        "adequate": "#f39c12",
-        "needs_work": "#e67e22",
-        "poor": "#e74c3c"
+    # Map ratings to CSS classes
+    rating_classes = {
+        "excellent": ("a", "success"),
+        "good": ("b", "success"),
+        "adequate": ("c", "warning"),
+        "needs_work": ("d", "warning"),
+        "poor": ("f", "error")
     }
 
     for area, data in assessment.items():
@@ -731,17 +744,15 @@ def _render_technique_breakdown(assessment: dict):
             continue
 
         rating = data.get('rating', 'adequate')
-        color = rating_colors.get(rating, "#666")
+        badge_class, card_class = rating_classes.get(rating, ("c", "info"))
         area_name = area.replace('_', ' ').title()
 
         st.markdown(f"""
-        <div style="background: {color}11; border-left: 3px solid {color};
-                    padding: 10px; margin-bottom: 8px; border-radius: 0 6px 6px 0;">
-            <strong>{area_name}:</strong>
-            <span style="background: {color}; color: white; padding: 2px 8px;
-                        border-radius: 4px; font-size: 11px; margin-left: 8px;">
-                {rating.upper()}
-            </span>
+        <div class="feedback-card feedback-card-{card_class}">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <strong class="feedback-title">{area_name}</strong>
+                <span class="grade-badge grade-badge-{badge_class}">{rating.replace('_', ' ')}</span>
+            </div>
         </div>
         """, unsafe_allow_html=True)
 
@@ -826,12 +837,19 @@ def _render_score_trend(progress: list):
     for i, (col, p) in enumerate(zip(cols, progress[-5:])):
         with col:
             score = p['score_pct']
-            color = "#27ae60" if score >= 70 else "#f39c12" if score >= 50 else "#e74c3c"
+            if score >= 80:
+                score_class = "excellent"
+            elif score >= 65:
+                score_class = "good"
+            elif score >= 50:
+                score_class = "average"
+            else:
+                score_class = "poor"
+
             st.markdown(f"""
-            <div style="text-align: center; padding: 10px; background: {color}11;
-                        border-radius: 8px; border: 1px solid {color};">
-                <div style="font-size: 1.5rem; font-weight: bold; color: {color};">{score:.0f}%</div>
-                <div style="font-size: 0.7rem; color: #666;">Session {i+1}</div>
+            <div class="score-card score-card-{score_class}" style="padding: 10px;">
+                <div class="score-value score-value-{score_class}" style="font-size: 1.5rem;">{score:.0f}%</div>
+                <div class="score-label">Session {i+1}</div>
             </div>
             """, unsafe_allow_html=True)
 
@@ -846,19 +864,25 @@ def _render_question_type_performance(type_stats: list):
         q_type = stat['question_type'] or 'unknown'
         total = stat['total'] or 0
         correct = stat['correct'] or 0
-        avg_score = stat['avg_score'] or 0
 
         pct = correct * 100 // max(total, 1)
-        color = "#27ae60" if pct >= 70 else "#f39c12" if pct >= 50 else "#e74c3c"
+        if pct >= 80:
+            bar_class = "excellent"
+        elif pct >= 65:
+            bar_class = "good"
+        elif pct >= 50:
+            bar_class = "average"
+        else:
+            bar_class = "poor"
 
         st.markdown(f"""
-        <div style="margin-bottom: 10px;">
-            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                <span><strong>{q_type.replace('_', ' ').title()}</strong></span>
-                <span>{correct}/{total} ({pct}%)</span>
+        <div class="criteria-card">
+            <div class="criteria-header">
+                <span class="criteria-name">{q_type.replace('_', ' ').title()}</span>
+                <span class="criteria-score score-value-{bar_class}">{correct}/{total} ({pct}%)</span>
             </div>
-            <div style="background: #eee; height: 8px; border-radius: 4px;">
-                <div style="background: {color}; width: {pct}%; height: 100%; border-radius: 4px;"></div>
+            <div class="criteria-bar">
+                <div class="criteria-bar-fill criteria-bar-fill-{bar_class}" style="width: {pct}%;"></div>
             </div>
         </div>
         """, unsafe_allow_html=True)

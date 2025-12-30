@@ -277,4 +277,308 @@ CARDS_CSS = """
             grid-template-columns: 1fr;
         }
     }
+
+    /* =========================================
+       SCORE CARDS
+       For displaying grades, scores, and evaluations
+       ========================================= */
+
+    .score-card {
+        background: linear-gradient(135deg, var(--surface-secondary), var(--surface-tertiary));
+        border: 2px solid var(--border-color);
+        border-radius: var(--radius-xl);
+        padding: var(--space-6);
+        text-align: center;
+        transition: all var(--transition-normal);
+        margin: var(--space-4) 0;
+    }
+
+    .score-card:hover {
+        transform: translateY(-2px);
+        box-shadow: var(--shadow-lg);
+    }
+
+    /* Score card color variants */
+    .score-card-excellent {
+        border-color: var(--color-grade-a);
+        background: linear-gradient(135deg, var(--color-grade-a-bg), rgba(17, 153, 142, 0.05));
+    }
+
+    .score-card-good {
+        border-color: var(--color-grade-b);
+        background: linear-gradient(135deg, var(--color-grade-b-bg), rgba(102, 126, 234, 0.05));
+    }
+
+    .score-card-average {
+        border-color: var(--color-grade-c);
+        background: linear-gradient(135deg, var(--color-grade-c-bg), rgba(243, 156, 18, 0.05));
+    }
+
+    .score-card-below {
+        border-color: var(--color-grade-d);
+        background: linear-gradient(135deg, var(--color-grade-d-bg), rgba(230, 126, 34, 0.05));
+    }
+
+    .score-card-poor {
+        border-color: var(--color-grade-f);
+        background: linear-gradient(135deg, var(--color-grade-f-bg), rgba(231, 76, 60, 0.05));
+    }
+
+    /* Score value inside cards */
+    .score-value {
+        font-family: var(--font-display) !important;
+        font-size: var(--text-5xl) !important;
+        font-weight: var(--font-extrabold) !important;
+        line-height: var(--leading-none) !important;
+        margin: 0 0 var(--space-2) 0 !important;
+    }
+
+    .score-value-excellent { color: var(--color-grade-a) !important; }
+    .score-value-good { color: var(--color-grade-b) !important; }
+    .score-value-average { color: var(--color-grade-c) !important; }
+    .score-value-below { color: var(--color-grade-d) !important; }
+    .score-value-poor { color: var(--color-grade-f) !important; }
+
+    .score-label {
+        font-family: var(--font-sans) !important;
+        font-size: var(--text-sm) !important;
+        color: var(--text-tertiary);
+        text-transform: uppercase;
+        letter-spacing: var(--tracking-wide);
+    }
+
+    .score-summary {
+        font-family: var(--font-sans) !important;
+        font-size: var(--text-base);
+        color: var(--text-secondary);
+        margin-top: var(--space-3);
+        line-height: var(--leading-relaxed);
+    }
+
+    /* =========================================
+       CRITERIA CARDS
+       For displaying evaluation criteria scores
+       ========================================= */
+
+    .criteria-card {
+        background: var(--surface-primary);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-lg);
+        padding: var(--space-4);
+        margin: var(--space-2) 0;
+    }
+
+    .criteria-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: var(--space-2);
+    }
+
+    .criteria-name {
+        font-family: var(--font-sans) !important;
+        font-weight: var(--font-semibold);
+        color: var(--text-primary);
+        text-transform: capitalize;
+    }
+
+    .criteria-score {
+        font-family: var(--font-mono) !important;
+        font-weight: var(--font-bold);
+        font-size: var(--text-sm);
+    }
+
+    .criteria-bar {
+        height: 8px;
+        background: var(--surface-tertiary);
+        border-radius: var(--radius-full);
+        overflow: hidden;
+        margin: var(--space-2) 0;
+    }
+
+    .criteria-bar-fill {
+        height: 100%;
+        border-radius: var(--radius-full);
+        transition: width var(--transition-slow);
+    }
+
+    .criteria-bar-fill-excellent { background: linear-gradient(90deg, var(--color-grade-a), #38ef7d); }
+    .criteria-bar-fill-good { background: linear-gradient(90deg, var(--color-grade-b), #818cf8); }
+    .criteria-bar-fill-average { background: linear-gradient(90deg, var(--color-grade-c), #f5c542); }
+    .criteria-bar-fill-below { background: linear-gradient(90deg, var(--color-grade-d), #f39c12); }
+    .criteria-bar-fill-poor { background: linear-gradient(90deg, var(--color-grade-f), #c0392b); }
+
+    .criteria-comment {
+        font-family: var(--font-sans) !important;
+        font-size: var(--text-sm);
+        color: var(--text-tertiary);
+        font-style: italic;
+    }
+
+    /* =========================================
+       FEEDBACK CARDS
+       For displaying strengths, improvements, etc.
+       ========================================= */
+
+    .feedback-card {
+        background: var(--surface-primary);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-lg);
+        padding: var(--space-5);
+        margin: var(--space-3) 0;
+    }
+
+    .feedback-card-success {
+        border-left: 4px solid var(--color-success);
+        background: linear-gradient(90deg, var(--color-grade-a-bg) 0%, var(--surface-primary) 20%);
+    }
+
+    .feedback-card-warning {
+        border-left: 4px solid var(--color-warning);
+        background: linear-gradient(90deg, var(--color-grade-c-bg) 0%, var(--surface-primary) 20%);
+    }
+
+    .feedback-card-error {
+        border-left: 4px solid var(--color-error);
+        background: linear-gradient(90deg, var(--color-grade-f-bg) 0%, var(--surface-primary) 20%);
+    }
+
+    .feedback-card-info {
+        border-left: 4px solid var(--color-primary);
+        background: linear-gradient(90deg, var(--color-grade-b-bg) 0%, var(--surface-primary) 20%);
+    }
+
+    .feedback-title {
+        font-family: var(--font-sans) !important;
+        font-weight: var(--font-semibold);
+        font-size: var(--text-base);
+        color: var(--text-primary);
+        margin-bottom: var(--space-2);
+    }
+
+    .feedback-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+
+    .feedback-list li {
+        font-family: var(--font-sans) !important;
+        font-size: var(--text-sm);
+        color: var(--text-secondary);
+        padding: var(--space-1) 0;
+        padding-left: var(--space-4);
+        position: relative;
+    }
+
+    .feedback-list li::before {
+        content: '•';
+        position: absolute;
+        left: 0;
+        color: var(--color-primary);
+        font-weight: bold;
+    }
+
+    /* =========================================
+       SESSION CARDS
+       For study sessions, practice sessions, etc.
+       ========================================= */
+
+    .session-card {
+        background: var(--surface-primary);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-lg);
+        padding: var(--space-5);
+        margin: var(--space-3) 0;
+        transition: all var(--transition-normal);
+    }
+
+    .session-card:hover {
+        box-shadow: var(--shadow-md);
+    }
+
+    .session-card-active {
+        border-color: var(--color-primary);
+        background: linear-gradient(135deg, var(--color-grade-b-bg), var(--surface-primary));
+    }
+
+    .session-card-completed {
+        border-color: var(--color-success);
+        background: linear-gradient(135deg, var(--color-grade-a-bg), var(--surface-primary));
+    }
+
+    .session-card-missed {
+        border-color: var(--color-error);
+        background: linear-gradient(135deg, var(--color-grade-f-bg), var(--surface-primary));
+        opacity: 0.8;
+    }
+
+    /* =========================================
+       TECHNIQUE CARDS
+       For exam techniques, study methods, etc.
+       ========================================= */
+
+    .technique-card {
+        background: var(--surface-primary);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-lg);
+        padding: var(--space-5);
+        margin: var(--space-3) 0;
+        transition: all var(--transition-normal);
+    }
+
+    .technique-card:hover {
+        border-color: var(--color-primary);
+        box-shadow: var(--shadow-md);
+    }
+
+    .technique-title {
+        font-family: var(--font-sans) !important;
+        font-weight: var(--font-semibold);
+        font-size: var(--text-lg);
+        color: var(--text-primary);
+        margin-bottom: var(--space-2);
+    }
+
+    .technique-description {
+        font-family: var(--font-sans) !important;
+        font-size: var(--text-sm);
+        color: var(--text-secondary);
+        line-height: var(--leading-relaxed);
+    }
+
+    .technique-steps {
+        margin-top: var(--space-4);
+        padding-left: var(--space-4);
+    }
+
+    .technique-steps li {
+        font-family: var(--font-sans) !important;
+        font-size: var(--text-sm);
+        color: var(--text-secondary);
+        padding: var(--space-1) 0;
+    }
+
+    .technique-tips {
+        margin-top: var(--space-3);
+        padding: var(--space-3);
+        background: var(--surface-secondary);
+        border-radius: var(--radius-md);
+    }
+
+    .technique-tips li {
+        font-family: var(--font-sans) !important;
+        font-size: var(--text-sm);
+        color: var(--text-tertiary);
+        padding: var(--space-1) 0;
+        list-style: none;
+        padding-left: var(--space-4);
+        position: relative;
+    }
+
+    .technique-tips li::before {
+        content: '💡';
+        position: absolute;
+        left: 0;
+    }
 """

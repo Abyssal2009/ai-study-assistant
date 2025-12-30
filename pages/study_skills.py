@@ -296,20 +296,32 @@ Always be encouraging - students should feel motivated to improve, not discourag
         return None
 
 
+def _get_score_class(score: int) -> str:
+    """Get CSS class based on score."""
+    if score >= 80:
+        return "excellent"
+    elif score >= 65:
+        return "good"
+    elif score >= 50:
+        return "average"
+    elif score >= 35:
+        return "below"
+    else:
+        return "poor"
+
+
 def _display_evaluation_results(feedback: dict):
     """Display note evaluation feedback."""
     st.markdown("### Your Results")
 
     # Score card
     score = feedback.get('overall_score', 0)
-    color = "#27ae60" if score >= 70 else "#f39c12" if score >= 50 else "#e74c3c"
+    score_class = _get_score_class(score)
 
     st.markdown(f"""
-    <div style="background: linear-gradient(135deg, {color}22, {color}11);
-                border: 2px solid {color}; padding: 25px; border-radius: 12px;
-                text-align: center; margin-bottom: 20px;">
-        <h1 style="font-size: 3.5rem; margin: 0; color: {color};">{score}%</h1>
-        <p style="font-size: 1.1rem; margin: 10px 0; color: #333;">{feedback.get('summary', '')}</p>
+    <div class="score-card score-card-{score_class}">
+        <h1 class="score-value score-value-{score_class}">{score}%</h1>
+        <p class="score-summary">{feedback.get('summary', '')}</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -322,18 +334,18 @@ def _display_evaluation_results(feedback: dict):
             score_val = data.get('score', 0)
             max_val = data.get('max', 10)
             pct = (score_val / max_val) * 100
-            bar_color = "#27ae60" if pct >= 70 else "#f39c12" if pct >= 50 else "#e74c3c"
+            bar_class = _get_score_class(int(pct))
 
             st.markdown(f"""
-            <div style="margin-bottom: 12px;">
-                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                    <span><strong>{criteria.replace('_', ' ').title()}</strong></span>
-                    <span>{score_val}/{max_val}</span>
+            <div class="criteria-card">
+                <div class="criteria-header">
+                    <span class="criteria-name">{criteria.replace('_', ' ').title()}</span>
+                    <span class="criteria-score score-value-{bar_class}">{score_val}/{max_val}</span>
                 </div>
-                <div style="background: #eee; height: 10px; border-radius: 5px;">
-                    <div style="background: {bar_color}; width: {pct}%; height: 100%; border-radius: 5px;"></div>
+                <div class="criteria-bar">
+                    <div class="criteria-bar-fill criteria-bar-fill-{bar_class}" style="width: {pct}%;"></div>
                 </div>
-                <p style="font-size: 0.85rem; color: #666; margin: 4px 0 0 0;">{data.get('comment', '')}</p>
+                <p class="criteria-comment">{data.get('comment', '')}</p>
             </div>
             """, unsafe_allow_html=True)
 

@@ -379,4 +379,293 @@ COMPONENTS_CSS = """
         color: var(--text-tertiary);
         margin-top: var(--space-2);
     }
+
+    /* =========================================
+       STEP CARDS
+       For instructions, how-to guides, etc.
+       ========================================= */
+
+    .step-card {
+        background: var(--surface-primary);
+        border-radius: var(--radius-lg);
+        padding: var(--space-4) var(--space-5);
+        margin-bottom: var(--space-3);
+        border-left: 3px solid var(--color-primary);
+        position: relative;
+        transition: all var(--transition-normal);
+    }
+
+    .step-card:hover {
+        transform: translateX(4px);
+        box-shadow: var(--shadow-sm);
+    }
+
+    .step-number {
+        position: absolute;
+        left: calc(var(--space-5) * -1 - 12px);
+        top: 50%;
+        transform: translateY(-50%);
+        width: 24px;
+        height: 24px;
+        background: var(--color-primary);
+        color: white;
+        border-radius: var(--radius-full);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: var(--font-sans) !important;
+        font-size: var(--text-xs);
+        font-weight: var(--font-bold);
+    }
+
+    .step-content {
+        font-family: var(--font-sans) !important;
+        font-size: var(--text-sm);
+        color: var(--text-secondary);
+        line-height: var(--leading-relaxed);
+    }
+
+    /* =========================================
+       TIP BOX
+       For tips, hints, and suggestions
+       ========================================= */
+
+    .tip-box {
+        background: linear-gradient(135deg, rgba(102, 126, 234, 0.1), rgba(102, 126, 234, 0.05));
+        border: 1px solid rgba(102, 126, 234, 0.2);
+        border-radius: var(--radius-lg);
+        padding: var(--space-4) var(--space-5);
+        margin: var(--space-4) 0;
+        position: relative;
+        padding-left: var(--space-10);
+    }
+
+    .tip-box::before {
+        content: '💡';
+        position: absolute;
+        left: var(--space-4);
+        top: var(--space-4);
+        font-size: var(--text-lg);
+    }
+
+    .tip-box-title {
+        font-family: var(--font-sans) !important;
+        font-weight: var(--font-semibold);
+        font-size: var(--text-sm);
+        color: var(--color-primary);
+        margin-bottom: var(--space-1);
+        text-transform: uppercase;
+        letter-spacing: var(--tracking-wide);
+    }
+
+    .tip-box-content {
+        font-family: var(--font-sans) !important;
+        font-size: var(--text-sm);
+        color: var(--text-secondary);
+        line-height: var(--leading-relaxed);
+    }
+
+    /* =========================================
+       IMPROVEMENT ITEM
+       For displaying specific improvements/issues
+       ========================================= */
+
+    .improvement-item {
+        background: var(--surface-primary);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-lg);
+        padding: var(--space-4);
+        margin: var(--space-3) 0;
+    }
+
+    .improvement-header {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        margin-bottom: var(--space-2);
+    }
+
+    .improvement-severity {
+        width: 8px;
+        height: 8px;
+        border-radius: var(--radius-full);
+    }
+
+    .improvement-severity-high { background: var(--color-error); }
+    .improvement-severity-medium { background: var(--color-warning); }
+    .improvement-severity-low { background: var(--color-primary); }
+
+    .improvement-area {
+        font-family: var(--font-sans) !important;
+        font-weight: var(--font-semibold);
+        font-size: var(--text-sm);
+        color: var(--text-primary);
+        text-transform: capitalize;
+    }
+
+    .improvement-issue {
+        font-family: var(--font-sans) !important;
+        font-size: var(--text-sm);
+        color: var(--text-secondary);
+        margin-bottom: var(--space-2);
+    }
+
+    .improvement-suggestion {
+        font-family: var(--font-sans) !important;
+        font-size: var(--text-sm);
+        color: var(--color-success);
+        font-style: italic;
+    }
+
+    .improvement-example {
+        background: var(--surface-secondary);
+        border-radius: var(--radius-md);
+        padding: var(--space-3);
+        margin-top: var(--space-2);
+        font-family: var(--font-mono) !important;
+        font-size: var(--text-xs);
+        color: var(--text-tertiary);
+    }
+
+    /* =========================================
+       TIMER DISPLAY ENHANCEMENTS
+       Extended timer styles
+       ========================================= */
+
+    .timer-large {
+        font-family: var(--font-mono) !important;
+        font-size: var(--text-4xl);
+        font-weight: var(--font-extrabold);
+        text-align: center;
+        padding: var(--space-6);
+        border-radius: var(--radius-xl);
+        background: linear-gradient(135deg, var(--surface-secondary), var(--surface-tertiary));
+        border: 2px solid var(--border-color);
+        margin: var(--space-4) 0;
+    }
+
+    .timer-large-primary {
+        border-color: var(--color-primary);
+        background: linear-gradient(135deg, var(--color-grade-b-bg), rgba(102, 126, 234, 0.05));
+    }
+
+    .timer-large-warning {
+        border-color: var(--color-warning);
+        background: linear-gradient(135deg, var(--color-grade-c-bg), rgba(243, 156, 18, 0.05));
+    }
+
+    .timer-large-danger {
+        border-color: var(--color-error);
+        background: linear-gradient(135deg, var(--color-grade-f-bg), rgba(231, 76, 60, 0.05));
+        animation: timerPulse 1s ease-in-out infinite;
+    }
+
+    .timer-value {
+        font-size: var(--text-5xl);
+        font-weight: var(--font-extrabold);
+        letter-spacing: var(--tracking-wider);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .timer-value-primary { color: var(--color-primary); }
+    .timer-value-warning { color: var(--color-warning); }
+    .timer-value-danger { color: var(--color-error); }
+
+    /* =========================================
+       PROGRESS DISPLAYS
+       For showing progress, completion, etc.
+       ========================================= */
+
+    .progress-bar-container {
+        background: var(--surface-tertiary);
+        border-radius: var(--radius-full);
+        height: 12px;
+        overflow: hidden;
+        margin: var(--space-2) 0;
+    }
+
+    .progress-bar-fill {
+        height: 100%;
+        border-radius: var(--radius-full);
+        transition: width var(--transition-slow);
+    }
+
+    .progress-bar-primary {
+        background: linear-gradient(90deg, var(--color-primary), var(--color-primary-light));
+    }
+
+    .progress-bar-success {
+        background: linear-gradient(90deg, var(--color-success), var(--color-success-light));
+    }
+
+    .progress-bar-warning {
+        background: linear-gradient(90deg, var(--color-warning), #f5c542);
+    }
+
+    .progress-bar-error {
+        background: linear-gradient(90deg, var(--color-error), #c0392b);
+    }
+
+    .progress-label {
+        display: flex;
+        justify-content: space-between;
+        font-family: var(--font-sans) !important;
+        font-size: var(--text-xs);
+        color: var(--text-tertiary);
+        margin-top: var(--space-1);
+    }
+
+    /* =========================================
+       NEXT STEPS / ACTION ITEMS
+       ========================================= */
+
+    .next-steps {
+        background: linear-gradient(135deg, rgba(102, 126, 234, 0.1), rgba(102, 126, 234, 0.05));
+        border: 1px solid rgba(102, 126, 234, 0.2);
+        border-radius: var(--radius-lg);
+        padding: var(--space-5);
+        margin: var(--space-4) 0;
+    }
+
+    .next-steps-title {
+        font-family: var(--font-sans) !important;
+        font-weight: var(--font-semibold);
+        font-size: var(--text-base);
+        color: var(--color-primary);
+        margin-bottom: var(--space-3);
+    }
+
+    .next-steps-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        counter-reset: step-counter;
+    }
+
+    .next-steps-list li {
+        font-family: var(--font-sans) !important;
+        font-size: var(--text-sm);
+        color: var(--text-secondary);
+        padding: var(--space-2) 0;
+        padding-left: var(--space-8);
+        position: relative;
+        counter-increment: step-counter;
+    }
+
+    .next-steps-list li::before {
+        content: counter(step-counter);
+        position: absolute;
+        left: 0;
+        top: var(--space-2);
+        width: 20px;
+        height: 20px;
+        background: var(--color-primary);
+        color: white;
+        border-radius: var(--radius-full);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: var(--text-xs);
+        font-weight: var(--font-bold);
+    }
 """

@@ -28,6 +28,31 @@ VARIABLES_CSS = """
         --color-error: #e74c3c;
         --color-warning: #f39c12;
 
+        /* ===================
+           GRADE COLORS
+           =================== */
+
+        /* Grade scale (A-F) - consistent across all pages */
+        --color-grade-a: #11998e;      /* Excellent - matches success */
+        --color-grade-b: #667eea;      /* Good - matches primary */
+        --color-grade-c: #f39c12;      /* Average - amber/warning */
+        --color-grade-d: #e67e22;      /* Below average - orange */
+        --color-grade-f: #e74c3c;      /* Poor - matches error */
+
+        /* Grade backgrounds with transparency */
+        --color-grade-a-bg: rgba(17, 153, 142, 0.1);
+        --color-grade-b-bg: rgba(102, 126, 234, 0.1);
+        --color-grade-c-bg: rgba(243, 156, 18, 0.1);
+        --color-grade-d-bg: rgba(230, 126, 34, 0.1);
+        --color-grade-f-bg: rgba(231, 76, 60, 0.1);
+
+        /* Grade borders (slightly more saturated) */
+        --color-grade-a-border: rgba(17, 153, 142, 0.3);
+        --color-grade-b-border: rgba(102, 126, 234, 0.3);
+        --color-grade-c-border: rgba(243, 156, 18, 0.3);
+        --color-grade-d-border: rgba(230, 126, 34, 0.3);
+        --color-grade-f-border: rgba(231, 76, 60, 0.3);
+
         /* Neutrals */
         --color-gray-50: #f9fafb;
         --color-gray-100: #f3f4f6;
