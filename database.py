@@ -481,6 +481,63 @@ def init_database():
         )
     """)
 
+    # ==========================================================================
+    # EXAM TECHNIQUE TRAINER TABLES
+    # ==========================================================================
+
+    # Technique practice sessions - timed exam practice
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS technique_practice_sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            subject_id INTEGER NOT NULL,
+            session_type TEXT NOT NULL,
+            question_types TEXT,
+            total_questions INTEGER NOT NULL,
+            questions_answered INTEGER DEFAULT 0,
+            correct_answers INTEGER DEFAULT 0,
+            total_marks INTEGER DEFAULT 0,
+            marks_achieved INTEGER DEFAULT 0,
+            time_limit_seconds INTEGER,
+            time_taken_seconds INTEGER,
+            status TEXT DEFAULT 'in_progress',
+            started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            completed_at TIMESTAMP,
+            ai_review TEXT,
+            FOREIGN KEY (subject_id) REFERENCES subjects(id)
+        )
+    """)
+
+    # Technique practice responses - per-question responses with timing
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS technique_practice_responses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id INTEGER NOT NULL,
+            question_number INTEGER NOT NULL,
+            question_type TEXT,
+            question_text TEXT,
+            student_answer TEXT,
+            correct_answer TEXT,
+            is_correct INTEGER,
+            marks_awarded INTEGER DEFAULT 0,
+            max_marks INTEGER DEFAULT 1,
+            time_taken_seconds INTEGER,
+            time_status TEXT,
+            FOREIGN KEY (session_id) REFERENCES technique_practice_sessions(id)
+        )
+    """)
+
+    # Exam techniques - static reference data for tips
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS exam_techniques (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            category TEXT NOT NULL,
+            question_type TEXT,
+            title TEXT NOT NULL,
+            description TEXT NOT NULL,
+            tips TEXT NOT NULL
+        )
+    """)
+
     # Index for efficient card_reviews date lookups
     cursor.execute("""
         CREATE INDEX IF NOT EXISTS idx_card_reviews_date
@@ -4930,6 +4987,386 @@ def trigger_missed_session_adjustment(session_id: int):
 
     conn.close()
     return False
+
+
+# =============================================================================
+# EXAM TECHNIQUE TRAINER FUNCTIONS
+# =============================================================================
+
+def create_technique_session(subject_id: int, session_type: str, question_types: str,
+                             total_questions: int, time_limit: int = None) -> int:
+    """Create a new technique practice session. Returns session ID."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO technique_practice_sessions
+        (subject_id, session_type, question_types, total_questions, time_limit_seconds)
+        VALUES (?, ?, ?, ?, ?)
+    """, (subject_id, session_type, question_types, total_questions, time_limit))
+    conn.commit()
+    session_id = cursor.lastrowid
+    conn.close()
+    return session_id
+
+
+def update_technique_session(session_id: int, **kwargs):
+    """Update technique session fields."""
+    if not kwargs:
+        return
+    conn = get_connection()
+    cursor = conn.cursor()
+    set_clause = ", ".join([f"{k} = ?" for k in kwargs.keys()])
+    values = list(kwargs.values()) + [session_id]
+    cursor.execute(f"UPDATE technique_practice_sessions SET {set_clause} WHERE id = ?", values)
+    conn.commit()
+    conn.close()
+
+
+def complete_technique_session(session_id: int, time_taken: int, ai_review: str = None):
+    """Mark a technique session as completed."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        UPDATE technique_practice_sessions
+        SET status = 'completed', completed_at = CURRENT_TIMESTAMP,
+            time_taken_seconds = ?, ai_review = ?
+        WHERE id = ?
+    """, (time_taken, ai_review, session_id))
+    conn.commit()
+    conn.close()
+
+
+def get_technique_session(session_id: int) -> dict:
+    """Get a technique practice session by ID."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT tps.*, s.name as subject_name, s.colour as subject_colour
+        FROM technique_practice_sessions tps
+        JOIN subjects s ON tps.subject_id = s.id
+        WHERE tps.id = ?
+    """, (session_id,))
+    session = cursor.fetchone()
+    conn.close()
+    return row_to_dict(session)
+
+
+def get_recent_technique_sessions(subject_id: int = None, limit: int = 20) -> list:
+    """Get recent completed technique practice sessions."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    if subject_id:
+        cursor.execute("""
+            SELECT tps.*, s.name as subject_name, s.colour as subject_colour
+            FROM technique_practice_sessions tps
+            JOIN subjects s ON tps.subject_id = s.id
+            WHERE tps.subject_id = ? AND tps.status = 'completed'
+            ORDER BY tps.completed_at DESC
+            LIMIT ?
+        """, (subject_id, limit))
+    else:
+        cursor.execute("""
+            SELECT tps.*, s.name as subject_name, s.colour as subject_colour
+            FROM technique_practice_sessions tps
+            JOIN subjects s ON tps.subject_id = s.id
+            WHERE tps.status = 'completed'
+            ORDER BY tps.completed_at DESC
+            LIMIT ?
+        """, (limit,))
+    sessions = cursor.fetchall()
+    conn.close()
+    return rows_to_dicts(sessions)
+
+
+def save_technique_response(session_id: int, question_number: int, question_type: str,
+                            question_text: str, student_answer: str, correct_answer: str,
+                            is_correct: int, marks_awarded: int, max_marks: int,
+                            time_taken: int, time_status: str) -> int:
+    """Save a response to a technique practice question."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO technique_practice_responses
+        (session_id, question_number, question_type, question_text, student_answer,
+         correct_answer, is_correct, marks_awarded, max_marks, time_taken_seconds, time_status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (session_id, question_number, question_type, question_text, student_answer,
+          correct_answer, is_correct, marks_awarded, max_marks, time_taken, time_status))
+    conn.commit()
+    response_id = cursor.lastrowid
+
+    # Update session stats
+    cursor.execute("""
+        UPDATE technique_practice_sessions
+        SET questions_answered = questions_answered + 1,
+            correct_answers = correct_answers + ?,
+            marks_achieved = marks_achieved + ?,
+            total_marks = total_marks + ?
+        WHERE id = ?
+    """, (is_correct, marks_awarded, max_marks, session_id))
+    conn.commit()
+    conn.close()
+    return response_id
+
+
+def get_technique_responses(session_id: int) -> list:
+    """Get all responses for a technique practice session."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT * FROM technique_practice_responses
+        WHERE session_id = ?
+        ORDER BY question_number
+    """, (session_id,))
+    responses = cursor.fetchall()
+    conn.close()
+    return rows_to_dicts(responses)
+
+
+def get_technique_stats(subject_id: int = None, days: int = 30) -> dict:
+    """Get aggregate statistics for technique practice sessions."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cutoff = (date.today() - timedelta(days=days)).isoformat()
+
+    if subject_id:
+        cursor.execute("""
+            SELECT
+                COUNT(*) as total_sessions,
+                COALESCE(AVG(CASE WHEN total_marks > 0 THEN marks_achieved * 100.0 / total_marks END), 0) as avg_score,
+                COALESCE(AVG(CASE WHEN time_limit_seconds > 0 AND time_taken_seconds <= time_limit_seconds THEN 1.0 ELSE 0.0 END), 0) as time_efficiency,
+                COALESCE(SUM(questions_answered), 0) as total_questions,
+                COALESCE(SUM(correct_answers), 0) as total_correct
+            FROM technique_practice_sessions
+            WHERE subject_id = ? AND status = 'completed' AND started_at >= ?
+        """, (subject_id, cutoff))
+    else:
+        cursor.execute("""
+            SELECT
+                COUNT(*) as total_sessions,
+                COALESCE(AVG(CASE WHEN total_marks > 0 THEN marks_achieved * 100.0 / total_marks END), 0) as avg_score,
+                COALESCE(AVG(CASE WHEN time_limit_seconds > 0 AND time_taken_seconds <= time_limit_seconds THEN 1.0 ELSE 0.0 END), 0) as time_efficiency,
+                COALESCE(SUM(questions_answered), 0) as total_questions,
+                COALESCE(SUM(correct_answers), 0) as total_correct
+            FROM technique_practice_sessions
+            WHERE status = 'completed' AND started_at >= ?
+        """, (cutoff,))
+
+    row = cursor.fetchone()
+    conn.close()
+    return row_to_dict(row) if row else {
+        'total_sessions': 0, 'avg_score': 0, 'time_efficiency': 0,
+        'total_questions': 0, 'total_correct': 0
+    }
+
+
+def get_technique_progress_over_time(subject_id: int = None, limit: int = 20) -> list:
+    """Get session-by-session progress for charting."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    if subject_id:
+        cursor.execute("""
+            SELECT
+                id, started_at, completed_at,
+                CASE WHEN total_marks > 0 THEN marks_achieved * 100.0 / total_marks ELSE 0 END as score_pct,
+                time_taken_seconds, time_limit_seconds,
+                questions_answered, correct_answers
+            FROM technique_practice_sessions
+            WHERE subject_id = ? AND status = 'completed'
+            ORDER BY completed_at DESC
+            LIMIT ?
+        """, (subject_id, limit))
+    else:
+        cursor.execute("""
+            SELECT
+                id, started_at, completed_at,
+                CASE WHEN total_marks > 0 THEN marks_achieved * 100.0 / total_marks ELSE 0 END as score_pct,
+                time_taken_seconds, time_limit_seconds,
+                questions_answered, correct_answers
+            FROM technique_practice_sessions
+            WHERE status = 'completed'
+            ORDER BY completed_at DESC
+            LIMIT ?
+        """, (limit,))
+    sessions = cursor.fetchall()
+    conn.close()
+    return rows_to_dicts(sessions)
+
+
+def get_technique_by_question_type(subject_id: int = None) -> list:
+    """Get performance breakdown by question type."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    if subject_id:
+        cursor.execute("""
+            SELECT
+                question_type,
+                COUNT(*) as total,
+                SUM(is_correct) as correct,
+                AVG(time_taken_seconds) as avg_time,
+                AVG(CASE WHEN max_marks > 0 THEN marks_awarded * 100.0 / max_marks ELSE 0 END) as avg_score
+            FROM technique_practice_responses tpr
+            JOIN technique_practice_sessions tps ON tpr.session_id = tps.id
+            WHERE tps.subject_id = ? AND tps.status = 'completed'
+            GROUP BY question_type
+        """, (subject_id,))
+    else:
+        cursor.execute("""
+            SELECT
+                question_type,
+                COUNT(*) as total,
+                SUM(is_correct) as correct,
+                AVG(time_taken_seconds) as avg_time,
+                AVG(CASE WHEN max_marks > 0 THEN marks_awarded * 100.0 / max_marks ELSE 0 END) as avg_score
+            FROM technique_practice_responses tpr
+            JOIN technique_practice_sessions tps ON tpr.session_id = tps.id
+            WHERE tps.status = 'completed'
+            GROUP BY question_type
+        """)
+    types = cursor.fetchall()
+    conn.close()
+    return rows_to_dicts(types)
+
+
+def get_all_exam_techniques(category: str = None, question_type: str = None) -> list:
+    """Get exam techniques, optionally filtered by category or question type."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    query = "SELECT * FROM exam_techniques WHERE 1=1"
+    params = []
+
+    if category:
+        query += " AND category = ?"
+        params.append(category)
+    if question_type:
+        query += " AND (question_type = ? OR question_type IS NULL)"
+        params.append(question_type)
+
+    query += " ORDER BY category, title"
+    cursor.execute(query, params)
+    techniques = cursor.fetchall()
+    conn.close()
+    return rows_to_dicts(techniques)
+
+
+def seed_exam_techniques():
+    """Seed initial exam technique tips if table is empty."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    # Check if already seeded
+    cursor.execute("SELECT COUNT(*) FROM exam_techniques")
+    if cursor.fetchone()[0] > 0:
+        conn.close()
+        return 0
+
+    import json
+    techniques = [
+        # Time Management
+        {
+            "category": "time_management",
+            "question_type": None,
+            "title": "Marks-to-Minutes Rule",
+            "description": "Allocate roughly 1-1.5 minutes per mark available. Check total marks and exam time to calculate your pace.",
+            "tips": json.dumps(["Check total marks and time at start", "Calculate time per mark", "Set mini-deadlines for each section"])
+        },
+        {
+            "category": "time_management",
+            "question_type": None,
+            "title": "Leave Time for Review",
+            "description": "Save 5-10 minutes at the end to check your work and catch silly mistakes.",
+            "tips": json.dumps(["Plan to finish 10 mins early", "Check calculations and spelling", "Ensure you answered the question asked"])
+        },
+        {
+            "category": "time_management",
+            "question_type": None,
+            "title": "Don't Get Stuck",
+            "description": "If a question is taking too long, move on and return to it later. Don't let one question cost you marks on others.",
+            "tips": json.dumps(["Set a time limit per question", "Mark difficult questions to revisit", "Secure easy marks first"])
+        },
+        # Question Approach - Essay
+        {
+            "category": "question_approach",
+            "question_type": "essay",
+            "title": "PEE/PEEL Structure",
+            "description": "Use Point-Evidence-Explanation-Link for each paragraph. This ensures structured, analytical writing.",
+            "tips": json.dumps(["State your point clearly first", "Support with specific evidence or quotes", "Explain why this supports your argument", "Link back to the question"])
+        },
+        {
+            "category": "question_approach",
+            "question_type": "essay",
+            "title": "Plan Before Writing",
+            "description": "Spend 3-5 minutes planning your essay structure. A quick plan leads to better organised answers.",
+            "tips": json.dumps(["Jot down 3-4 main points", "Order them logically", "Note key evidence for each", "Write a thesis statement"])
+        },
+        # Question Approach - Multiple Choice
+        {
+            "category": "question_approach",
+            "question_type": "multiple_choice",
+            "title": "Process of Elimination",
+            "description": "Rule out obviously wrong answers first, then choose from remaining options.",
+            "tips": json.dumps(["Cross out answers you know are wrong", "Compare remaining options", "Look for absolute words like 'always' or 'never'"])
+        },
+        {
+            "category": "question_approach",
+            "question_type": "multiple_choice",
+            "title": "Read All Options First",
+            "description": "Don't jump at the first plausible answer. Read all options before deciding.",
+            "tips": json.dumps(["Read the question twice", "Consider all options", "Look for the 'best' answer, not just a correct one"])
+        },
+        # Question Approach - Short Answer
+        {
+            "category": "question_approach",
+            "question_type": "short_answer",
+            "title": "Key Term Focus",
+            "description": "Identify command words (explain, describe, compare) and key terms. Answer exactly what's asked.",
+            "tips": json.dumps(["Underline command words", "Address every part of the question", "Be concise - no waffle"])
+        },
+        # Answer Technique
+        {
+            "category": "answer_technique",
+            "question_type": None,
+            "title": "Show Your Working",
+            "description": "In maths and science, show all steps. You can get marks for method even if the final answer is wrong.",
+            "tips": json.dumps(["Write each step clearly", "Include units", "Box or underline final answers"])
+        },
+        {
+            "category": "answer_technique",
+            "question_type": None,
+            "title": "Answer the Actual Question",
+            "description": "Re-read the question after writing your answer. Make sure you answered what was asked.",
+            "tips": json.dumps(["Check command words", "Ensure you addressed all parts", "Link conclusion to the question"])
+        },
+        {
+            "category": "answer_technique",
+            "question_type": None,
+            "title": "Use Subject Terminology",
+            "description": "Use correct technical terms from your subject. Examiners look for proper vocabulary.",
+            "tips": json.dumps(["Learn key terms for each topic", "Define terms when first used", "Avoid vague language"])
+        }
+    ]
+
+    for tech in techniques:
+        cursor.execute("""
+            INSERT INTO exam_techniques (category, question_type, title, description, tips)
+            VALUES (?, ?, ?, ?, ?)
+        """, (tech['category'], tech['question_type'], tech['title'], tech['description'], tech['tips']))
+
+    conn.commit()
+    count = len(techniques)
+    conn.close()
+    return count
+
+
+def delete_technique_session(session_id: int):
+    """Delete a technique practice session and its responses."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM technique_practice_responses WHERE session_id = ?", (session_id,))
+    cursor.execute("DELETE FROM technique_practice_sessions WHERE id = ?", (session_id,))
+    conn.commit()
+    conn.close()
 
 
 # Initialise database when module is imported

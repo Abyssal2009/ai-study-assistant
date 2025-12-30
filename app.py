@@ -12,7 +12,7 @@ from pages import (
     dashboard, ai_tools, bubble_ace, study_schedule,
     homework, exams, flashcards, notes,
     past_papers, focus_timer, subjects, statistics, settings,
-    knowledge_gaps, srs_analytics, essay_tutor
+    knowledge_gaps, srs_analytics, essay_tutor, exam_technique
 )
 
 
@@ -69,6 +69,18 @@ if 'assessment_index' not in st.session_state:
 if 'assessment_start_time' not in st.session_state:
     st.session_state.assessment_start_time = None
 
+# Exam Technique Trainer state
+if 'technique_session' not in st.session_state:
+    st.session_state.technique_session = None
+if 'technique_question_index' not in st.session_state:
+    st.session_state.technique_question_index = 0
+if 'technique_start_time' not in st.session_state:
+    st.session_state.technique_start_time = None
+if 'technique_question_start' not in st.session_state:
+    st.session_state.technique_question_start = None
+if 'technique_questions' not in st.session_state:
+    st.session_state.technique_questions = []
+
 
 # =============================================================================
 # SIDEBAR - NAVIGATION
@@ -85,6 +97,7 @@ with st.sidebar:
             "Bubble Ace",
             "AI Tools",
             "Essay Tutor",
+            "Exam Technique",
             "Knowledge Gaps",
             "Study Schedule",
             "Homework",
@@ -126,6 +139,7 @@ PAGE_MODULES = {
     "Bubble Ace": bubble_ace,
     "AI Tools": ai_tools,
     "Essay Tutor": essay_tutor,
+    "Exam Technique": exam_technique,
     "Knowledge Gaps": knowledge_gaps,
     "Study Schedule": study_schedule,
     "Homework": homework,
@@ -150,4 +164,4 @@ if page in PAGE_MODULES:
 # =============================================================================
 
 st.markdown("---")
-st.caption("Study Assistant v2.2 | Essay Tutor, SRS Analytics, Study Schedule & More! 📝📊📅🤖")
+st.caption("Study Assistant v2.3 | Exam Technique, Essay Tutor, SRS Analytics & More! 🎯📝📊🤖")
