@@ -40,6 +40,9 @@ data/backups/*.json
 google_token.json
 onedrive_token.json
 
+# Streamlit secrets (contains API keys)
+.streamlit/secrets.toml
+
 # Note images (user data - keep directory structure)
 data/images/notes/*.png
 data/images/notes/*.jpg

@@ -40,6 +40,28 @@ st.markdown("""
 
 
 # =============================================================================
+# GOOGLE CALENDAR OAUTH CALLBACK HANDLER
+# =============================================================================
+
+# Check for OAuth callback code in URL
+query_params = st.query_params
+if 'code' in query_params:
+    import google_calendar as gcal
+
+    auth_code = query_params['code']
+
+    # Exchange code for tokens
+    if gcal.handle_calendar_callback(auth_code):
+        st.success("Successfully connected to Google Calendar!")
+        # Clear the code from URL
+        st.query_params.clear()
+        st.rerun()
+    else:
+        st.error("Failed to connect to Google Calendar. Please try again.")
+        st.query_params.clear()
+
+
+# =============================================================================
 # SESSION STATE INITIALISATION
 # =============================================================================
 

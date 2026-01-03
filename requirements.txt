@@ -12,7 +12,7 @@ opencv-python>=4.8.0
 sentence-transformers>=2.2.0
 numpy>=1.24.0
 
-# Cloud Backup - Google Drive
+# Google APIs - Drive Backup & Calendar Sync
 google-api-python-client>=2.100.0
 google-auth-httplib2>=0.1.1
 google-auth-oauthlib>=1.1.0

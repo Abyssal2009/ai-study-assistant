@@ -6,6 +6,7 @@ Exam calendar and countdown with Google Calendar sync.
 import streamlit as st
 import database as db
 from utils import days_until
+import google_calendar as gcal
 
 
 def render():
@@ -83,12 +84,7 @@ def render():
         st.markdown("### Add New Exam")
 
         # Check calendar connection for auto-sync option
-        try:
-            from cloud.google_calendar import get_client
-            calendar_client = get_client()
-            calendar_connected = calendar_client.is_authenticated()
-        except (ImportError, Exception):
-            calendar_connected = False
+        calendar_connected = db.is_calendar_connected()
 
         with st.form("add_exam"):
             name = st.text_input("Exam Name *", placeholder="e.g., Biology Paper 1")
@@ -120,14 +116,10 @@ def render():
 
                     # Auto-sync to calendar if enabled
                     if auto_sync and calendar_connected:
-                        exam = db.get_exam_by_id(exam_id)
-                        if exam:
-                            success, msg, event_id = calendar_client.sync_exam_to_calendar(exam)
-                            if success and event_id:
-                                db.update_exam_calendar_id(exam_id, event_id)
-                                st.success("☁️ Added to Google Calendar")
-                            else:
-                                st.warning(f"Calendar sync failed: {msg}")
+                        if gcal.sync_exam_to_calendar(exam_id):
+                            st.success("☁️ Added to Google Calendar")
+                        else:
+                            st.warning("Calendar sync failed")
 
                     st.rerun()
                 else:
@@ -141,68 +133,49 @@ def render():
 
 def _render_calendar_sync_status():
     """Show Google Calendar connection status and sync button."""
-    try:
-        from cloud.google_calendar import get_client
-        client = get_client()
-
-        if client.is_authenticated():
-            col1, col2 = st.columns([3, 1])
-            with col1:
-                st.success("☁️ Connected to Google Calendar")
-            with col2:
-                unsynced = db.get_exams_without_calendar_id()
-                if unsynced:
-                    if st.button(f"Sync All ({len(unsynced)})"):
-                        with st.spinner("Syncing exams to Google Calendar..."):
-                            success, failed, messages = client.sync_all_exams(unsynced)
-                            if success > 0:
-                                st.success(f"Synced {success} exam(s) to calendar")
-                            if failed > 0:
-                                for msg in messages:
-                                    st.warning(msg)
-                            st.rerun()
-        else:
-            st.info("☁️ Connect to Google Calendar in Settings > Backup & Sync to enable sync")
-
-    except ImportError:
-        st.caption("Google Calendar integration not available")
-    except Exception as e:
-        st.caption(f"Calendar status: {e}")
+    if db.is_calendar_connected():
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            st.success("☁️ Connected to Google Calendar")
+        with col2:
+            unsynced = db.get_exams_without_calendar_id()
+            if unsynced:
+                if st.button(f"Sync All ({len(unsynced)})"):
+                    with st.spinner("Syncing exams to Google Calendar..."):
+                        success, failed = gcal.sync_all_exams()
+                        if success > 0:
+                            st.success(f"Synced {success} exam(s) to calendar")
+                        if failed > 0:
+                            st.warning(f"{failed} exam(s) failed to sync")
+                        st.rerun()
+    elif gcal.is_configured():
+        st.info("☁️ Connect to Google Calendar in Settings > Backup & Sync to enable sync")
+    else:
+        st.caption("Google Calendar integration not configured")
 
 
 def _sync_single_exam(exam: dict):
     """Sync a single exam to Google Calendar."""
-    try:
-        from cloud.google_calendar import get_client
-        client = get_client()
+    if not db.is_calendar_connected():
+        st.warning("Connect to Google Calendar first in Settings")
+        return
 
-        if client.is_authenticated():
-            with st.spinner("Syncing..."):
-                success, msg, event_id = client.sync_exam_to_calendar(exam)
-                if success and event_id:
-                    db.update_exam_calendar_id(exam['id'], event_id)
-                    st.success(f"☁️ {msg}")
-                    st.rerun()
-                else:
-                    st.error(msg)
+    with st.spinner("Syncing..."):
+        if gcal.sync_exam_to_calendar(exam['id']):
+            st.success("☁️ Synced to Google Calendar")
+            st.rerun()
         else:
-            st.warning("Connect to Google Calendar first in Settings")
-    except Exception as e:
-        st.error(f"Sync error: {e}")
+            st.error("Failed to sync to calendar")
 
 
 def _delete_exam_with_calendar(exam_id: int):
     """Delete exam and remove from Google Calendar if synced."""
-    calendar_id = db.delete_exam(exam_id)
+    # Delete from calendar first (if connected)
+    if db.is_calendar_connected():
+        gcal.delete_exam_from_calendar(exam_id)
 
-    if calendar_id:
-        try:
-            from cloud.google_calendar import get_client
-            client = get_client()
-            if client.is_authenticated():
-                client.delete_from_calendar(calendar_id)
-        except (ImportError, Exception):
-            pass  # Calendar deletion is best-effort
+    # Then delete from database
+    db.delete_exam(exam_id)
 
 
 def _render_calendar_import(subjects):

@@ -611,6 +611,22 @@ def init_database():
         ON chat_messages(session_id, created_at DESC)
     """)
 
+    # ==========================================================================
+    # GOOGLE CALENDAR SYNC TABLE
+    # ==========================================================================
+
+    # Calendar sync - stores OAuth tokens and sync state
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS calendar_sync (
+            id INTEGER PRIMARY KEY,
+            access_token TEXT,
+            refresh_token TEXT,
+            token_expiry TIMESTAMP,
+            last_sync TIMESTAMP,
+            is_connected INTEGER DEFAULT 0
+        )
+    """)
+
     conn.commit()
     conn.close()
 
@@ -930,6 +946,88 @@ def get_exams_without_calendar_id() -> list:
     exams = cursor.fetchall()
     conn.close()
     return rows_to_dicts(exams)
+
+
+# =============================================================================
+# GOOGLE CALENDAR SYNC FUNCTIONS
+# =============================================================================
+
+def get_calendar_tokens() -> dict:
+    """Get stored Google Calendar OAuth tokens."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM calendar_sync WHERE id = 1")
+    row = cursor.fetchone()
+    conn.close()
+    return row_to_dict(row)
+
+
+def save_calendar_tokens(access_token: str, refresh_token: str, expiry: datetime):
+    """Save or update Google Calendar OAuth tokens."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT OR REPLACE INTO calendar_sync (id, access_token, refresh_token, token_expiry, is_connected)
+        VALUES (1, ?, ?, ?, 1)
+    """, (access_token, refresh_token, expiry))
+    conn.commit()
+    conn.close()
+
+
+def update_calendar_last_sync():
+    """Update the last sync timestamp."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        UPDATE calendar_sync SET last_sync = ? WHERE id = 1
+    """, (datetime.now(),))
+    conn.commit()
+    conn.close()
+
+
+def clear_calendar_tokens():
+    """Clear calendar tokens (disconnect)."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        UPDATE calendar_sync SET access_token = NULL, refresh_token = NULL,
+        token_expiry = NULL, is_connected = 0 WHERE id = 1
+    """)
+    conn.commit()
+    conn.close()
+
+
+def is_calendar_connected() -> bool:
+    """Check if Google Calendar is connected."""
+    tokens = get_calendar_tokens()
+    return tokens is not None and tokens.get('is_connected') == 1
+
+
+def clear_exam_calendar_id(exam_id: int):
+    """Clear the calendar ID for an exam (after deletion from calendar)."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE exams SET google_calendar_id = NULL WHERE id = ?",
+        (exam_id,)
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_exam_with_calendar_id(exam_id: int) -> dict:
+    """Get exam details including calendar ID."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT e.*, s.name as subject_name, s.colour as subject_colour
+        FROM exams e
+        JOIN subjects s ON e.subject_id = s.id
+        WHERE e.id = ?
+    """, (exam_id,))
+    exam = cursor.fetchone()
+    conn.close()
+    return row_to_dict(exam)
 
 
 # =============================================================================

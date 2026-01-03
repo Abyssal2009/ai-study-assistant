@@ -231,6 +231,11 @@ def render():
             st.markdown("#### Google Drive Connection")
             _render_google_drive_section()
 
+        # Google Calendar section
+        st.markdown("---")
+        st.markdown("#### Google Calendar Sync")
+        _render_google_calendar_section()
+
         # Local backup section
         st.markdown("---")
         st.markdown("#### Local Backups")
@@ -438,3 +443,76 @@ def _upload_to_cloud(service: str, local_path: str):
                 st.error(msg)
         else:
             st.warning("Connect to Google Drive first")
+
+
+def _render_google_calendar_section():
+    """Render Google Calendar sync UI."""
+    import google_calendar as gcal
+
+    # Check if credentials are configured
+    if not gcal.is_configured():
+        st.warning("""
+        **Google Calendar not configured.**
+
+        To enable exam sync to Google Calendar:
+        1. Go to [Google Cloud Console](https://console.cloud.google.com)
+        2. Create a project and enable **Google Calendar API**
+        3. Create OAuth 2.0 credentials (Web application)
+        4. Set redirect URI to `http://localhost:8501`
+        5. Add credentials to `.streamlit/secrets.toml`:
+
+        ```toml
+        [google_calendar]
+        client_id = "YOUR_CLIENT_ID"
+        client_secret = "YOUR_CLIENT_SECRET"
+        ```
+        """)
+        return
+
+    # Check connection status
+    is_connected = db.is_calendar_connected()
+
+    if is_connected:
+        tokens = db.get_calendar_tokens()
+        st.success("📅 Google Calendar connected")
+
+        if tokens and tokens.get('last_sync'):
+            st.caption(f"Last sync: {tokens['last_sync']}")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            if st.button("🔄 Sync All Exams", type="primary"):
+                with st.spinner("Syncing exams to Google Calendar..."):
+                    success, fail = gcal.sync_all_exams()
+                    if success > 0:
+                        st.success(f"Synced {success} exams to Google Calendar!")
+                    if fail > 0:
+                        st.warning(f"{fail} exams failed to sync")
+                    if success == 0 and fail == 0:
+                        st.info("All exams already synced!")
+
+        with col2:
+            if st.button("🔌 Disconnect Calendar"):
+                gcal.disconnect_calendar()
+                st.success("Disconnected from Google Calendar")
+                st.rerun()
+
+        # Show sync stats
+        exams_without_cal = db.get_exams_without_calendar_id()
+        all_exams = db.get_all_exams()
+
+        synced = len(all_exams) - len(exams_without_cal) if all_exams else 0
+        total = len(all_exams) if all_exams else 0
+
+        st.caption(f"Synced: {synced}/{total} exams")
+
+    else:
+        st.info("Connect to Google Calendar to sync your exam dates automatically.")
+
+        auth_url = gcal.get_calendar_auth_url()
+        if auth_url:
+            st.markdown(f"[🔗 Connect Google Calendar]({auth_url})")
+            st.caption("After authorization, you'll be redirected back here.")
+        else:
+            st.error("Failed to generate authorization URL")
