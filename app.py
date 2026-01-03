@@ -137,38 +137,24 @@ with st.sidebar:
     if 'selected_page' not in st.session_state:
         st.session_state.selected_page = "Dashboard"
 
-    # Render grouped selectbox navigation
+    # Render grouped button navigation
     for group_name, group_pages in NAV_GROUPS.items():
-        # Build options with emoji labels
-        options = [PAGE_LABELS[p] for p in group_pages]
-
-        # Check if current selection is in this group
-        current_in_group = st.session_state.selected_page in group_pages
-
-        # Calculate default index (0 if not in this group)
-        if current_in_group:
-            default_index = group_pages.index(st.session_state.selected_page)
-        else:
-            default_index = 0
-
-        # Selectbox for this group
-        selected_label = st.selectbox(
-            group_name,
-            options=options,
-            index=default_index,
-            key=f"nav_select_{group_name}"
-        )
-
-        # Reverse lookup: find page name from label
-        selected_page = next(p for p, lbl in PAGE_LABELS.items() if lbl == selected_label)
-
-        # Only navigate if user selected from this group and it's different
-        if selected_page in group_pages and selected_page != st.session_state.selected_page:
-            st.session_state.selected_page = selected_page
-            st.rerun()
+        st.markdown(f"**{group_name}**")
+        for page_name in group_pages:
+            label = PAGE_LABELS[page_name]
+            is_selected = st.session_state.selected_page == page_name
+            if st.button(
+                label,
+                key=f"nav_{page_name}",
+                use_container_width=True,
+                type="primary" if is_selected else "secondary"
+            ):
+                st.session_state.selected_page = page_name
+                st.rerun()
+        st.markdown("")  # spacing between groups
 
     # Get current page from session state
-    page = st.session_state.selected_page
+    page = st.session_state.get('selected_page', 'Dashboard')
 
     st.markdown("---")
 
@@ -211,9 +197,12 @@ PAGE_MODULES = {
     "Settings": settings,
 }
 
-# Render the selected page
+# Render the selected page with fallback
 if page in PAGE_MODULES:
     PAGE_MODULES[page].render()
+else:
+    st.error(f"Page '{page}' not found. Showing Dashboard instead.")
+    dashboard.render()
 
 
 # =============================================================================
