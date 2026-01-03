@@ -7,6 +7,7 @@ Uses RAG to provide context from your notes and flashcards.
 import streamlit as st
 import database as db
 from utils import call_claude_with_rag, CLAUDE_MODELS, DEFAULT_MODEL, days_until
+import re
 
 
 def render():
@@ -125,6 +126,22 @@ def render():
         _render_essay_tab(subjects, _call_claude, _show_sources)
 
 
+def _parse_generated_flashcards(text: str) -> list:
+    """Parse Q/A formatted flashcards into a list of dicts."""
+    flashcards = []
+    # Match Q: ... A: ... patterns (handles multiline)
+    pattern = r'Q:\s*(.+?)\s*A:\s*(.+?)(?=Q:|$)'
+    matches = re.findall(pattern, text, re.DOTALL | re.IGNORECASE)
+
+    for q, a in matches:
+        question = q.strip()
+        answer = a.strip()
+        if question and answer:
+            flashcards.append({'question': question, 'answer': answer})
+
+    return flashcards
+
+
 def _render_flashcard_tab(subjects, call_claude, show_sources):
     """Render the flashcard generation tab."""
     st.markdown("### 🃏 Generate Flashcards from Notes")
@@ -173,6 +190,30 @@ Make the questions test understanding, not just memorisation."""
                         show_sources(sources)
                     else:
                         st.error(result)
+
+            # Show save button if flashcards were generated
+            if st.session_state.get('generated_flashcards') and st.session_state.get('fc_subject_id'):
+                st.markdown("---")
+                parsed = _parse_generated_flashcards(st.session_state['generated_flashcards'])
+                if parsed:
+                    st.info(f"Found {len(parsed)} flashcards ready to save.")
+                    if st.button("💾 Save All to Flashcards", type="primary", key="save_fc_notes"):
+                        saved = 0
+                        for card in parsed:
+                            db.add_flashcard(
+                                subject_id=st.session_state['fc_subject_id'],
+                                question=card['question'],
+                                answer=card['answer'],
+                                topic=st.session_state.get('fc_topic', '')
+                            )
+                            saved += 1
+                        st.success(f"✓ Saved {saved} flashcards! Go to **Flashcards** to review them.")
+                        # Clear session state
+                        del st.session_state['generated_flashcards']
+                        del st.session_state['fc_subject_id']
+                        if 'fc_topic' in st.session_state:
+                            del st.session_state['fc_topic']
+                        st.rerun()
         else:
             st.info("No notes found. Create some notes first!")
 
@@ -203,11 +244,39 @@ Make the questions appropriate for GCSE level."""
                         st.success("Flashcards generated!")
                         st.markdown("### Generated Flashcards")
                         st.markdown(result)
+                        # Store for saving
+                        st.session_state['generated_flashcards_topic'] = result
+                        st.session_state['fc_topic_subject_id'] = fc_subject['id']
+                        st.session_state['fc_topic_name'] = fc_topic
                         show_sources(sources)
                     else:
                         st.error(result)
             else:
                 st.warning("Please enter a topic.")
+
+        # Show save button if flashcards were generated from topic
+        if st.session_state.get('generated_flashcards_topic') and st.session_state.get('fc_topic_subject_id'):
+            st.markdown("---")
+            parsed = _parse_generated_flashcards(st.session_state['generated_flashcards_topic'])
+            if parsed:
+                st.info(f"Found {len(parsed)} flashcards ready to save.")
+                if st.button("💾 Save All to Flashcards", type="primary", key="save_fc_topic"):
+                    saved = 0
+                    for card in parsed:
+                        db.add_flashcard(
+                            subject_id=st.session_state['fc_topic_subject_id'],
+                            question=card['question'],
+                            answer=card['answer'],
+                            topic=st.session_state.get('fc_topic_name', '')
+                        )
+                        saved += 1
+                    st.success(f"✓ Saved {saved} flashcards! Go to **Flashcards** to review them.")
+                    # Clear session state
+                    del st.session_state['generated_flashcards_topic']
+                    del st.session_state['fc_topic_subject_id']
+                    if 'fc_topic_name' in st.session_state:
+                        del st.session_state['fc_topic_name']
+                    st.rerun()
 
 
 def _render_quiz_tab(subjects, call_claude, show_sources):
@@ -451,15 +520,29 @@ Provide specific, actionable advice based on their actual data. Be encouraging b
 
 
 def _render_essay_tab(subjects, call_claude, show_sources):
-    """Render the essay helper tab."""
+    """Render the essay helper tab - redirects to Essay Tutor for full features."""
     st.markdown("### ✍️ Essay & Extended Writing Helper")
-    st.markdown("Get help planning and improving essays.")
 
-    essay_mode = st.radio(
-        "What do you need?",
-        ["Plan an essay", "Get feedback on my essay", "Improve a paragraph"],
-        horizontal=True
-    )
+    # Promote Essay Tutor page
+    st.info("""
+    **For full essay grading and detailed feedback**, use the dedicated **Essay Tutor** page.
+    It provides structured grading, section-by-section feedback, and tracks your essay history.
+    """)
+
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("📝 Go to Essay Tutor", type="primary", use_container_width=True):
+            st.session_state.selected_page = "Essay Tutor"
+            st.rerun()
+    with col2:
+        if st.button("📊 View Essay History", use_container_width=True):
+            st.session_state.selected_page = "Essay Tutor"
+            st.session_state.essay_tab = "history"
+            st.rerun()
+
+    st.markdown("---")
+    st.markdown("### ⚡ Quick Paragraph Improver")
+    st.caption("For quick improvements to a single paragraph, use the tool below.")
 
     essay_subject = st.selectbox(
         "Subject:",
@@ -468,82 +551,27 @@ def _render_essay_tab(subjects, call_claude, show_sources):
         key="essay_subject"
     )
 
-    if essay_mode == "Plan an essay":
-        essay_question = st.text_area(
-            "Essay question:",
-            placeholder="e.g., 'Explain how the structure of a leaf is adapted for photosynthesis' (6 marks)"
-        )
-        essay_marks = st.number_input("How many marks?", 2, 20, 6)
+    para_text = st.text_area("Paste your paragraph:", height=150, key="para_text")
+    para_goal = st.selectbox(
+        "What do you want to improve?",
+        ["Make it clearer", "Add more detail", "Use better vocabulary", "Make it more scientific", "Fix grammar"]
+    )
 
-        if st.button("📋 Create Essay Plan", type="primary"):
-            if essay_question:
-                with st.spinner("Creating essay plan..."):
-                    prompt = f"""Create a detailed essay plan for this GCSE {essay_subject['name']} question:
-
-Question: {essay_question}
-Marks: {essay_marks}
-
-Provide: 1. Key points 2. Structure 3. Keywords 4. Common mistakes 5. How to get full marks"""
-
-                    result, sources = call_claude(prompt, subject_id=essay_subject['id'])
-                    if not result.startswith("Error:"):
-                        st.markdown("### Essay Plan")
-                        st.markdown(result)
-                        show_sources(sources)
-                    else:
-                        st.error(result)
-            else:
-                st.warning("Please enter an essay question.")
-
-    elif essay_mode == "Get feedback on my essay":
-        essay_question = st.text_input("What was the question?", key="fb_question")
-        essay_text = st.text_area("Paste your essay:", height=300, key="fb_essay")
-        essay_marks = st.number_input("Total marks available:", 2, 20, 6, key="fb_marks")
-
-        if st.button("📊 Get Feedback", type="primary"):
-            if essay_text and essay_question:
-                with st.spinner("Analysing your essay..."):
-                    prompt = f"""Analyse this GCSE {essay_subject['name']} essay:
-
-Question: {essay_question}
-Marks available: {essay_marks}
-
-Student's essay:
-{essay_text}
-
-Provide: 1. Estimated mark 2. What was done well 3. Areas to improve 4. Missing points 5. Suggestions"""
-
-                    result = call_claude(prompt)
-                    if not result.startswith("Error:"):
-                        st.markdown("### Essay Feedback")
-                        st.markdown(result)
-                    else:
-                        st.error(result)
-            else:
-                st.warning("Please enter both the question and your essay.")
-
-    else:  # Improve a paragraph
-        para_text = st.text_area("Paste your paragraph:", height=150, key="para_text")
-        para_goal = st.selectbox(
-            "What do you want to improve?",
-            ["Make it clearer", "Add more detail", "Use better vocabulary", "Make it more scientific", "Fix grammar"]
-        )
-
-        if st.button("✨ Improve Paragraph", type="primary"):
-            if para_text:
-                with st.spinner("Improving..."):
-                    prompt = f"""Improve this paragraph for a GCSE {essay_subject['name']} essay.
+    if st.button("✨ Improve Paragraph", type="primary"):
+        if para_text:
+            with st.spinner("Improving..."):
+                prompt = f"""Improve this paragraph for a GCSE {essay_subject['name']} essay.
 
 Original: {para_text}
 Goal: {para_goal}
 
 Provide: 1. The improved paragraph 2. What you changed and why"""
 
-                    result = call_claude(prompt)
-                    if not result.startswith("Error:"):
-                        st.markdown("### Improved Paragraph")
-                        st.markdown(result)
-                    else:
-                        st.error(result)
-            else:
-                st.warning("Please enter a paragraph.")
+                result, _ = call_claude(prompt)
+                if not result.startswith("Error:"):
+                    st.markdown("### Improved Paragraph")
+                    st.markdown(result)
+                else:
+                    st.error(result)
+        else:
+            st.warning("Please enter a paragraph.")

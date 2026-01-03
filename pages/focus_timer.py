@@ -26,6 +26,8 @@ def render():
         st.session_state.timer_duration = 25
     if 'timer_subject_id' not in st.session_state:
         st.session_state.timer_subject_id = None
+    if 'timer_topic' not in st.session_state:
+        st.session_state.timer_topic = None
 
     # Today's stats
     focus_today = db.get_total_focus_minutes_today()
@@ -76,20 +78,29 @@ def render():
                 format_func=lambda x: f"{x} minutes"
             )
 
+        # Pre-fill topic from session state if coming from Study Schedule
+        default_topic = st.session_state.get('focus_topic', '')
+        topic = st.text_input(
+            "Topic (optional)",
+            value=default_topic,
+            placeholder="e.g., Photosynthesis, Quadratic equations",
+            help="Adding a topic helps track your mastery when you complete this session"
+        )
+
         st.markdown("#### Quick Start")
         col1, col2, col3 = st.columns(3)
         with col1:
             if st.button("⚡ 15 min", use_container_width=True):
-                _start_timer(subject['id'], 15)
+                _start_timer(subject['id'], 15, topic)
         with col2:
             if st.button("🎯 25 min", use_container_width=True, type="primary"):
-                _start_timer(subject['id'], 25)
+                _start_timer(subject['id'], 25, topic)
         with col3:
             if st.button("💪 45 min", use_container_width=True):
-                _start_timer(subject['id'], 45)
+                _start_timer(subject['id'], 45, topic)
 
         if st.button(f"▶️ Start {duration} min Session", type="primary", use_container_width=True):
-            _start_timer(subject['id'], duration)
+            _start_timer(subject['id'], duration, topic)
 
     else:
         # Timer running
@@ -101,8 +112,12 @@ def render():
         # Get subject name
         subject = db.get_subject_by_id(st.session_state.timer_subject_id)
         subject_name = subject['name'] if subject else "Unknown"
+        current_topic = st.session_state.get('timer_topic')
 
-        st.markdown(f"### Studying: **{subject_name}**")
+        if current_topic:
+            st.markdown(f"### Studying: **{subject_name}** - {current_topic}")
+        else:
+            st.markdown(f"### Studying: **{subject_name}**")
 
         # Timer display
         mins = int(remaining)
@@ -119,34 +134,41 @@ def render():
 
         if remaining <= 0:
             st.success("🎉 Session Complete!")
+            if current_topic:
+                st.info(f"Your mastery of '{current_topic}' has been updated!")
             st.balloons()
 
-            # Log the session
+            # Log the session with topic
             db.add_focus_session(
                 subject_id=st.session_state.timer_subject_id,
                 duration_minutes=duration,
-                completed=True
+                completed=True,
+                topic=current_topic
             )
 
             if st.button("Start Another Session", type="primary"):
                 st.session_state.timer_running = False
+                st.session_state.timer_topic = None
                 st.rerun()
         else:
             col1, col2 = st.columns(2)
             with col1:
                 if st.button("⏸️ Pause & Save", use_container_width=True):
-                    # Save partial session
+                    # Save partial session (not completed, so no mastery update)
                     db.add_focus_session(
                         subject_id=st.session_state.timer_subject_id,
                         duration_minutes=int(elapsed),
-                        completed=False
+                        completed=False,
+                        topic=current_topic
                     )
                     st.session_state.timer_running = False
+                    st.session_state.timer_topic = None
                     st.success(f"Saved {int(elapsed)} minutes!")
                     st.rerun()
             with col2:
                 if st.button("❌ Cancel", use_container_width=True):
                     st.session_state.timer_running = False
+                    st.session_state.timer_topic = None
                     st.rerun()
 
             # Auto-refresh
@@ -160,9 +182,10 @@ def render():
     if recent:
         for session in recent:
             status = "✅" if session.get('completed') else "⏸️"
+            topic_text = f" • {session['topic']}" if session.get('topic') else ""
             st.markdown(f"""
             <div style="background: #f8f9fa; padding: 10px; margin: 5px 0; border-radius: 8px;">
-                {status} <strong>{session['subject_name']}</strong> - {session['duration_minutes']} min
+                {status} <strong>{session['subject_name']}</strong>{topic_text} - {session['duration_minutes']} min
                 <span style="color: #666; font-size: 12px; float: right;">{session['created_at'][:10]}</span>
             </div>
             """, unsafe_allow_html=True)
@@ -170,10 +193,11 @@ def render():
         st.info("No recent sessions. Start your first focus session!")
 
 
-def _start_timer(subject_id: int, duration: int):
+def _start_timer(subject_id: int, duration: int, topic: str = None):
     """Start a new timer session."""
     st.session_state.timer_running = True
     st.session_state.timer_start_time = datetime.now()
     st.session_state.timer_duration = duration
     st.session_state.timer_subject_id = subject_id
+    st.session_state.timer_topic = topic if topic else None
     st.rerun()

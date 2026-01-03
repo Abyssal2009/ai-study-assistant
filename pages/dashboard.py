@@ -30,10 +30,26 @@ def render():
         st.stop()
 
     # TOP RECOMMENDATION - What should I study next?
-    top_rec = db.get_top_recommendation()
+    unified = db.get_unified_recommendations(available_time=30)
+    top_rec = unified['top']
     if top_rec:
-        color = get_urgency_colour(top_rec['urgency'])
-        icon = get_urgency_icon(top_rec['urgency'])
+        # Determine urgency color based on priority score
+        priority = top_rec.get('priority_score', 0)
+        if priority >= 70:
+            color = "#e74c3c"
+            icon = "🚨"
+        elif priority >= 50:
+            color = "#f39c12"
+            icon = "⚠️"
+        else:
+            color = "#3498db"
+            icon = "📚"
+
+        # Use subject color if available
+        color = top_rec.get('subject_colour', color)
+
+        # Build reason text from reasons list
+        reason_text = top_rec['reasons'][0] if top_rec.get('reasons') else ""
 
         st.markdown(f"""
         <div style="background: linear-gradient(135deg, {color}22, {color}11);
@@ -42,13 +58,34 @@ def render():
                     border-radius: 8px;
                     margin-bottom: 20px;">
             <h3 style="margin: 0 0 5px 0; color: {color};">{icon} What Should I Study Next?</h3>
-            <p style="font-size: 1.2em; margin: 5px 0; font-weight: bold;">{top_rec['title']}</p>
+            <p style="font-size: 1.2em; margin: 5px 0; font-weight: bold;">{top_rec['topic']}</p>
             <p style="margin: 5px 0; color: #666;">
-                <strong>{top_rec['subject_name']}</strong> • {top_rec['reason']}
+                <strong>{top_rec['subject_name']}</strong> • {reason_text}
             </p>
-            <p style="margin: 5px 0; font-style: italic; color: #888;">{top_rec['action']}</p>
+            <p style="margin: 5px 0; font-style: italic; color: #888;">
+                {top_rec.get('estimated_minutes', 30)} minutes recommended
+            </p>
         </div>
         """, unsafe_allow_html=True)
+
+        # Quick action button
+        col1, col2, col3 = st.columns([2, 2, 2])
+        with col1:
+            if st.button("🎯 Start Focus Session", key="dash_focus", type="primary"):
+                st.session_state.focus_subject_id = top_rec.get('subject_id')
+                st.session_state.focus_topic = top_rec.get('topic')
+                st.session_state.selected_page = "Focus Timer"
+                st.rerun()
+        with col2:
+            if top_rec.get('action_type') == 'flashcard_review':
+                if st.button("🃏 Review Flashcards", key="dash_fc"):
+                    st.session_state.selected_page = "Flashcards"
+                    st.session_state.review_mode = True
+                    st.rerun()
+            else:
+                if st.button("📅 View Schedule", key="dash_schedule"):
+                    st.session_state.selected_page = "Study Schedule"
+                    st.rerun()
 
     st.markdown("---")
 

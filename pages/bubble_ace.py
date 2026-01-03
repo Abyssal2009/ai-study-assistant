@@ -6,6 +6,8 @@ AI chatbot study buddy with RAG (Retrieval-Augmented Generation).
 import streamlit as st
 import database as db
 from utils import call_claude_chat_with_rag, CLAUDE_MODELS, DEFAULT_MODEL
+import uuid
+import json
 
 
 def render():
@@ -16,14 +18,24 @@ def render():
     # Session state setup
     if 'bubble_ace_api_key' not in st.session_state:
         st.session_state.bubble_ace_api_key = ""
-    if 'chat_history' not in st.session_state:
-        st.session_state.chat_history = []
     if 'ai_model' not in st.session_state:
         st.session_state.ai_model = DEFAULT_MODEL
     if 'use_rag' not in st.session_state:
         st.session_state.use_rag = True
     if 'last_sources' not in st.session_state:
         st.session_state.last_sources = []
+
+    # Chat session ID for persistence
+    if 'chat_session_id' not in st.session_state:
+        st.session_state.chat_session_id = str(uuid.uuid4())
+
+    # Load chat history from database on first load
+    if 'chat_history' not in st.session_state:
+        saved_messages = db.get_chat_messages(st.session_state.chat_session_id)
+        st.session_state.chat_history = [
+            {"role": msg['role'], "content": msg['content']}
+            for msg in saved_messages
+        ]
 
     # Settings expander
     with st.expander("⚙️ Settings", expanded=not st.session_state.bubble_ace_api_key):
@@ -92,7 +104,7 @@ def render():
     # Subject context
     subjects = db.get_all_subjects()
     if subjects:
-        col1, col2 = st.columns([3, 1])
+        col1, col2, col3 = st.columns([3, 1, 1])
         with col1:
             selected_subject = st.selectbox(
                 "Subject context (optional):",
@@ -102,6 +114,12 @@ def render():
         with col2:
             if st.button("🗑️ Clear Chat"):
                 st.session_state.chat_history = []
+                db.clear_chat_session(st.session_state.chat_session_id)
+                st.rerun()
+        with col3:
+            if st.button("🆕 New Chat"):
+                st.session_state.chat_history = []
+                st.session_state.chat_session_id = str(uuid.uuid4())
                 st.rerun()
 
     # Quick actions - prominent section
@@ -123,7 +141,7 @@ def render():
 
     # Chat display
     st.markdown("---")
-    for msg in st.session_state.chat_history:
+    for i, msg in enumerate(st.session_state.chat_history):
         if msg['role'] == 'user':
             st.markdown(f"""
             <div class="user-message">{msg['content']}</div>
@@ -132,6 +150,27 @@ def render():
             st.markdown(f"""
             <div class="assistant-message">{msg['content']}</div>
             """, unsafe_allow_html=True)
+
+            # Action buttons after AI responses (only for the last message)
+            if i == len(st.session_state.chat_history) - 1:
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    if st.button("🃏 Make Flashcards", key=f"fc_{i}", help="Create flashcards from this topic"):
+                        st.session_state.selected_page = "AI Tools"
+                        st.session_state.ai_tools_tab = "flashcards"
+                        st.rerun()
+                with col2:
+                    if st.button("📝 Take Quiz", key=f"quiz_{i}", help="Test your knowledge"):
+                        st.session_state.selected_page = "Knowledge Gaps"
+                        st.rerun()
+                with col3:
+                    if st.button("📅 Add to Schedule", key=f"sched_{i}", help="Schedule study time"):
+                        st.session_state.selected_page = "Study Schedule"
+                        st.rerun()
+                with col4:
+                    if st.button("📖 View Notes", key=f"notes_{i}", help="Go to Notes"):
+                        st.session_state.selected_page = "Notes"
+                        st.rerun()
 
     # Show sources from last response if RAG found any
     if st.session_state.last_sources:
@@ -152,7 +191,13 @@ def render():
     user_input = st.text_input("Ask Bubble Ace:", value=default_text, key="chat_input")
 
     if st.button("Send", type="primary") and user_input:
+        # Add user message and save to database
         st.session_state.chat_history.append({"role": "user", "content": user_input})
+        db.save_chat_message(
+            session_id=st.session_state.chat_session_id,
+            role="user",
+            content=user_input
+        )
 
         with st.spinner("Bubble Ace is thinking..."):
             subject_context = ""
@@ -177,5 +222,13 @@ Keep responses concise but informative. Use examples when helpful."""
             )
             st.session_state.chat_history.append({"role": "assistant", "content": response})
             st.session_state.last_sources = sources
+
+            # Save assistant response to database
+            db.save_chat_message(
+                session_id=st.session_state.chat_session_id,
+                role="assistant",
+                content=response,
+                sources_json=json.dumps(sources) if sources else None
+            )
 
         st.rerun()

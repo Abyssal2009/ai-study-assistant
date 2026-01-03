@@ -177,3 +177,23 @@ def render():
                         st.rerun()
         else:
             st.info("No flashcards yet. Add some using the 'Add Cards' tab!")
+
+    # Cross-page navigation
+    st.markdown("---")
+    st.markdown("### Related Actions")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        if st.button("🤖 Generate with AI", use_container_width=True,
+                     help="Generate flashcards using AI"):
+            st.session_state.selected_page = "AI Tools"
+            st.rerun()
+    with col2:
+        if st.button("🎯 Knowledge Gaps", use_container_width=True,
+                     help="Assess your knowledge"):
+            st.session_state.selected_page = "Knowledge Gaps"
+            st.rerun()
+    with col3:
+        if st.button("📊 SRS Analytics", use_container_width=True,
+                     help="View your spaced repetition stats"):
+            st.session_state.selected_page = "SRS Analytics"
+            st.rerun()

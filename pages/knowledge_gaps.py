@@ -39,6 +39,27 @@ def render():
     with tab3:
         _render_progress_report_tab(subjects)
 
+    # Cross-page navigation
+    st.markdown("---")
+    st.markdown("### Related Actions")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        if st.button("🃏 Review Flashcards", use_container_width=True,
+                     help="Practice with flashcards"):
+            st.session_state.selected_page = "Flashcards"
+            st.session_state.review_mode = True
+            st.rerun()
+    with col2:
+        if st.button("📅 Study Schedule", use_container_width=True,
+                     help="Plan your study sessions"):
+            st.session_state.selected_page = "Study Schedule"
+            st.rerun()
+    with col3:
+        if st.button("⏱️ Start Focus Session", use_container_width=True,
+                     help="Begin a timed study session"):
+            st.session_state.selected_page = "Focus Timer"
+            st.rerun()
+
 
 def _render_assessment_tab(subjects, api_key):
     """Render the assessment quiz tab."""
@@ -324,6 +345,34 @@ def _render_gap_analysis_tab(subjects, api_key):
                 """, unsafe_allow_html=True)
         else:
             st.info("Complete some assessments to identify strengths.")
+
+    # Add gaps to study schedule
+    if gaps:
+        st.markdown("---")
+        st.markdown("#### 📅 Add to Study Schedule")
+        if st.button("Add Top 5 Gaps to Schedule", type="primary", key="add_gaps_schedule"):
+            schedule = db.get_active_schedule()
+            if schedule:
+                from datetime import timedelta
+                added = 0
+                today = date.today()
+                for i, gap in enumerate(gaps[:5]):
+                    # Schedule one gap per day starting from tomorrow
+                    session_date = today + timedelta(days=i + 1)
+                    db.add_schedule_session(
+                        schedule_id=schedule['id'],
+                        subject_id=gap['subject_id'],
+                        scheduled_date=session_date,
+                        duration_minutes=30,
+                        topic=gap['topic'],
+                        priority_score=100 - gap['mastery_level'],
+                        reason=f"Knowledge gap: {gap['mastery_level']:.0f}% mastery"
+                    )
+                    added += 1
+                st.success(f"✓ Added {added} priority sessions to your study schedule!")
+                st.info("Go to **Study Schedule** to view them.")
+            else:
+                st.warning("No active schedule. Create one in **Study Schedule** → **Generate New** first.")
 
     # AI Gap Analysis
     st.markdown("---")

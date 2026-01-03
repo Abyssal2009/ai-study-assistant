@@ -59,7 +59,8 @@ def render():
                         st.markdown(f"**⚠️ {hw['title']}**")
                     else:
                         st.markdown(f"**{hw['title']}**")
-                    st.caption(f"{hw['subject_name']}")
+                    topic_text = f" • {hw['topic']}" if hw.get('topic') else ""
+                    st.caption(f"{hw['subject_name']}{topic_text}")
                 with col2:
                     st.markdown(format_due_date(hw['due_date']))
                 with col3:
@@ -88,6 +89,11 @@ def render():
                 format_func=lambda x: x['name']
             )
             due_date = st.date_input("Due Date *", value=date.today())
+            topic = st.text_input(
+                "Topic (optional)",
+                placeholder="e.g., Photosynthesis, Quadratic equations",
+                help="Adding a topic helps track your mastery when you complete this homework"
+            )
             priority = st.selectbox("Priority", options=["medium", "high", "low"])
             description = st.text_area("Description (optional)", placeholder="Additional details...")
 
@@ -98,7 +104,8 @@ def render():
                         title=title,
                         description=description,
                         due_date=due_date.isoformat(),
-                        priority=priority
+                        priority=priority,
+                        topic=topic if topic else None
                     )
                     st.success(f"✓ Added '{title}' to your homework list!")
                     st.rerun()

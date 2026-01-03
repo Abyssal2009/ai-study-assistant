@@ -30,6 +30,14 @@ st.set_page_config(
 # Apply custom CSS styles
 apply_styles(st)
 
+# Hide default Streamlit sidebar header elements
+st.markdown("""
+<style>
+    [data-testid="stSidebarHeader"] {display: none;}
+    section[data-testid="stSidebar"] > div:first-child {padding-top: 1rem;}
+</style>
+""", unsafe_allow_html=True)
+
 
 # =============================================================================
 # SESSION STATE INITIALISATION
@@ -88,40 +96,76 @@ if 'technique_questions' not in st.session_state:
 
 # Define navigation groups for better UX
 NAV_GROUPS = {
-    "📋 Daily Tasks": ["Dashboard", "Homework", "Focus Timer"],
-    "📚 Study Tools": ["Flashcards", "Notes", "Past Papers", "Exams"],
-    "🤖 AI Assistants": ["Bubble Ace", "AI Tools", "Essay Tutor", "Exam Technique", "Study Skills"],
-    "📊 Progress": ["Study Schedule", "Knowledge Gaps", "SRS Analytics", "Statistics"],
-    "⚙️ Settings": ["Subjects", "Settings"],
+    "Daily Tasks": ["Dashboard", "Homework", "Focus Timer"],
+    "Study Tools": ["Flashcards", "Notes", "Past Papers", "Exams"],
+    "AI Assistants": ["Bubble Ace", "AI Tools", "Essay Tutor", "Exam Technique", "Study Skills"],
+    "Progress": ["Study Schedule", "Knowledge Gaps", "SRS Analytics", "Statistics"],
+    "Settings": ["Subjects", "Settings"],
+}
+
+# Page display names with emojis
+PAGE_LABELS = {
+    "Dashboard": "📊 Dashboard",
+    "Homework": "📝 Homework",
+    "Focus Timer": "⏱️ Focus Timer",
+    "Flashcards": "🃏 Flashcards",
+    "Notes": "📓 Notes",
+    "Past Papers": "📄 Past Papers",
+    "Exams": "🎓 Exams",
+    "Bubble Ace": "💬 Bubble Ace",
+    "AI Tools": "🤖 AI Tools",
+    "Essay Tutor": "✍️ Essay Tutor",
+    "Exam Technique": "🎯 Exam Technique",
+    "Study Skills": "📚 Study Skills",
+    "Study Schedule": "📅 Study Schedule",
+    "Knowledge Gaps": "🔍 Knowledge Gaps",
+    "SRS Analytics": "📈 SRS Analytics",
+    "Statistics": "📉 Statistics",
+    "Subjects": "📖 Subjects",
+    "Settings": "⚙️ Settings",
 }
 
 # Flatten for page lookup
 ALL_PAGES = [page for pages in NAV_GROUPS.values() for page in pages]
 
 with st.sidebar:
+    # Logo at top
     st.title("📚 Study Assistant")
+    st.markdown("---")
 
     # Initialize selected page in session state
     if 'selected_page' not in st.session_state:
         st.session_state.selected_page = "Dashboard"
 
-    # Render grouped navigation
-    for group_name, pages in NAV_GROUPS.items():
-        st.markdown(f"**{group_name}**")
-        for page_name in pages:
-            # Highlight current page
-            is_selected = st.session_state.selected_page == page_name
-            button_type = "primary" if is_selected else "secondary"
+    # Render grouped selectbox navigation
+    for group_name, group_pages in NAV_GROUPS.items():
+        # Build options with emoji labels
+        options = [PAGE_LABELS[p] for p in group_pages]
 
-            if st.button(
-                page_name,
-                key=f"nav_{page_name}",
-                use_container_width=True,
-                type=button_type
-            ):
-                st.session_state.selected_page = page_name
-                st.rerun()
-        st.markdown("")  # Add spacing between groups
+        # Check if current selection is in this group
+        current_in_group = st.session_state.selected_page in group_pages
+
+        # Calculate default index (0 if not in this group)
+        if current_in_group:
+            default_index = group_pages.index(st.session_state.selected_page)
+        else:
+            default_index = 0
+
+        # Selectbox for this group
+        selected_label = st.selectbox(
+            group_name,
+            options=options,
+            index=default_index,
+            key=f"nav_select_{group_name}"
+        )
+
+        # Reverse lookup: find page name from label
+        selected_page = next(p for p, lbl in PAGE_LABELS.items() if lbl == selected_label)
+
+        # Only navigate if user selected from this group and it's different
+        if selected_page in group_pages and selected_page != st.session_state.selected_page:
+            st.session_state.selected_page = selected_page
+            st.rerun()
 
     # Get current page from session state
     page = st.session_state.selected_page
@@ -177,4 +221,4 @@ if page in PAGE_MODULES:
 # =============================================================================
 
 st.markdown("---")
-st.caption("Study Assistant v2.4 | Study Skills, Exam Technique, Essay Tutor & More! 📚🎯📝🤖")
+st.caption("Study Assistant v2.5 | Study Skills, Exam Technique, Essay Tutor & More! 📚🎯📝🤖")

@@ -38,6 +38,26 @@ def render():
     with tab3:
         _render_history_tab()
 
+    # Cross-page navigation
+    st.markdown("---")
+    st.markdown("### Related Actions")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        if st.button("🃏 Create Flashcards", use_container_width=True,
+                     help="Create flashcards from essay feedback"):
+            st.session_state.selected_page = "AI Tools"
+            st.rerun()
+    with col2:
+        if st.button("📚 Study Skills", use_container_width=True,
+                     help="Learn note-taking and study techniques"):
+            st.session_state.selected_page = "Study Skills"
+            st.rerun()
+    with col3:
+        if st.button("🫧 Ask Bubble Ace", use_container_width=True,
+                     help="Get more help from AI"):
+            st.session_state.selected_page = "Bubble Ace"
+            st.rerun()
+
 
 def _render_submit_tab(api_key: str):
     """Render the Submit & Grade tab."""

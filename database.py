@@ -55,12 +55,19 @@ def init_database():
             description TEXT,
             due_date DATE NOT NULL,
             priority TEXT DEFAULT 'medium',
+            topic TEXT,
             completed INTEGER DEFAULT 0,
             completed_at TIMESTAMP,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (subject_id) REFERENCES subjects(id)
         )
     """)
+
+    # Migration: Add topic column to homework if it doesn't exist
+    try:
+        cursor.execute("ALTER TABLE homework ADD COLUMN topic TEXT")
+    except sqlite3.OperationalError:
+        pass  # Column already exists
 
     # Exams table - tracks exam dates
     cursor.execute("""
@@ -95,9 +102,16 @@ def init_database():
             actual_minutes INTEGER,
             completed INTEGER DEFAULT 0,
             notes TEXT,
+            topic TEXT,
             FOREIGN KEY (subject_id) REFERENCES subjects(id)
         )
     """)
+
+    # Migration: Add topic column to focus_sessions if it doesn't exist
+    try:
+        cursor.execute("ALTER TABLE focus_sessions ADD COLUMN topic TEXT")
+    except sqlite3.OperationalError:
+        pass  # Column already exists
 
     # Flashcards table - stores questions and answers with SM-2 scheduling data
     # SM-2 Algorithm fields:
@@ -579,6 +593,24 @@ def init_database():
         ON card_reviews(date(reviewed_at))
     """)
 
+    # Chat messages - for Bubble Ace chat persistence
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS chat_messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT NOT NULL,
+            role TEXT NOT NULL,
+            content TEXT NOT NULL,
+            sources_json TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # Index for efficient chat message lookups by session
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_chat_messages_session
+        ON chat_messages(session_id, created_at DESC)
+    """)
+
     conn.commit()
     conn.close()
 
@@ -644,14 +676,15 @@ def delete_subject(subject_id: int):
 # =============================================================================
 
 def add_homework(subject_id: int, title: str, due_date: date,
-                 description: str = "", priority: str = "medium") -> int:
+                 description: str = "", priority: str = "medium",
+                 topic: str = None) -> int:
     """Add a new homework item. Returns the new homework's ID."""
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute(
-        """INSERT INTO homework (subject_id, title, description, due_date, priority)
-           VALUES (?, ?, ?, ?, ?)""",
-        (subject_id, title, description, due_date, priority)
+        """INSERT INTO homework (subject_id, title, description, due_date, priority, topic)
+           VALUES (?, ?, ?, ?, ?, ?)""",
+        (subject_id, title, description, due_date, priority, topic)
     )
     conn.commit()
     homework_id = cursor.lastrowid
@@ -739,15 +772,32 @@ def get_overdue_homework() -> list:
 
 
 def mark_homework_complete(homework_id: int):
-    """Mark a homework item as completed."""
+    """Mark a homework item as completed and update topic mastery if applicable."""
     conn = get_connection()
     cursor = conn.cursor()
+
+    # Get homework details to check for topic
+    cursor.execute(
+        "SELECT subject_id, topic FROM homework WHERE id = ?",
+        (homework_id,)
+    )
+    homework = cursor.fetchone()
+
+    # Mark as complete
     cursor.execute(
         "UPDATE homework SET completed = 1, completed_at = ? WHERE id = ?",
         (datetime.now(), homework_id)
     )
     conn.commit()
     conn.close()
+
+    # Update topic mastery if homework has a topic
+    if homework and homework['topic']:
+        update_topic_mastery(
+            subject_id=homework['subject_id'],
+            topic=homework['topic'],
+            is_correct=True  # Completing homework counts as successful practice
+        )
 
 
 def mark_homework_incomplete(homework_id: int):
@@ -3304,17 +3354,27 @@ def get_focus_streak():
     return streak
 
 
-def add_focus_session(subject_id: int, duration_minutes: int, completed: bool = True):
-    """Add a focus session."""
+def add_focus_session(subject_id: int, duration_minutes: int, completed: bool = True,
+                      topic: str = None):
+    """Add a focus session and update topic mastery if topic is provided."""
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("""
-        INSERT INTO focus_sessions (subject_id, started_at, actual_minutes, completed)
-        VALUES (?, datetime('now'), ?, ?)
-    """, (subject_id, duration_minutes, 1 if completed else 0))
+        INSERT INTO focus_sessions (subject_id, started_at, actual_minutes, completed, topic)
+        VALUES (?, datetime('now'), ?, ?, ?)
+    """, (subject_id, duration_minutes, 1 if completed else 0, topic))
     conn.commit()
     session_id = cursor.lastrowid
     conn.close()
+
+    # Update topic mastery if session was completed with a topic
+    if completed and topic and subject_id:
+        update_topic_mastery(
+            subject_id=subject_id,
+            topic=topic,
+            is_correct=True  # Completing a focus session counts as successful practice
+        )
+
     return session_id
 
 
@@ -4706,6 +4766,83 @@ def get_smart_recommendation(available_minutes: int = 30) -> dict:
     }
 
 
+def get_unified_recommendations(available_time: int = 30, limit: int = 5) -> dict:
+    """
+    Unified recommendation engine used by Dashboard, Study Schedule, and AI Tools.
+
+    Combines all factors: exam dates, knowledge gaps, flashcard due counts,
+    homework, mastery levels, and review schedules.
+
+    Returns:
+        {
+            'top': The single best recommendation (dict or None),
+            'alternatives': List of up to (limit-1) additional recommendations,
+            'summary': Brief text summary of what to do next
+        }
+    """
+    # Use the smart recommendation engine as the base
+    result = get_smart_recommendation(available_time)
+
+    if result['recommendation']:
+        top = result['recommendation']
+
+        # Generate summary text
+        summary = f"Study {top['topic']}"
+        if top.get('exam_days') and top['exam_days'] <= 30:
+            summary += f" (exam in {top['exam_days']} days)"
+        elif top.get('mastery_level') and top['mastery_level'] < 50:
+            summary += f" (mastery: {top['mastery_level']:.0f}%)"
+
+        return {
+            'top': top,
+            'alternatives': result['alternatives'][:limit-1],
+            'summary': summary
+        }
+
+    # If no smart recommendations, fall back to study_recommendations for urgent items
+    fallback = get_study_recommendations(limit=limit)
+    if fallback:
+        top_fb = fallback[0]
+        # Convert to unified format
+        top = {
+            'subject_id': top_fb.get('subject_id'),
+            'subject_name': top_fb['subject_name'],
+            'subject_colour': top_fb.get('subject_colour', '#3498db'),
+            'topic': top_fb['title'],
+            'priority_score': top_fb['priority_score'],
+            'mastery_level': None,
+            'reasons': [top_fb['reason']],
+            'estimated_minutes': available_time,
+            'action_type': top_fb['type'],
+            'exam_days': None
+        }
+        alternatives = []
+        for alt in fallback[1:limit]:
+            alternatives.append({
+                'subject_id': alt.get('subject_id'),
+                'subject_name': alt['subject_name'],
+                'subject_colour': alt.get('subject_colour', '#3498db'),
+                'topic': alt['title'],
+                'priority_score': alt['priority_score'],
+                'mastery_level': None,
+                'reasons': [alt['reason']],
+                'estimated_minutes': available_time,
+                'action_type': alt['type'],
+                'exam_days': None
+            })
+        return {
+            'top': top,
+            'alternatives': alternatives,
+            'summary': f"{top_fb['title']} - {top_fb['reason']}"
+        }
+
+    return {
+        'top': None,
+        'alternatives': [],
+        'summary': "You're all caught up!"
+    }
+
+
 def get_subject_study_summary() -> list:
     """Get summary of study status per subject for schedule overview."""
     conn = get_connection()
@@ -5739,6 +5876,82 @@ def delete_note_evaluation(evaluation_id: int):
     cursor.execute("DELETE FROM note_evaluations WHERE id = ?", (evaluation_id,))
     conn.commit()
     conn.close()
+
+
+# =============================================================================
+# CHAT PERSISTENCE FUNCTIONS (for Bubble Ace)
+# =============================================================================
+
+def save_chat_message(session_id: str, role: str, content: str,
+                      sources_json: str = None) -> int:
+    """Save a chat message to the database. Returns the message ID."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO chat_messages (session_id, role, content, sources_json)
+        VALUES (?, ?, ?, ?)
+    """, (session_id, role, content, sources_json))
+    conn.commit()
+    message_id = cursor.lastrowid
+    conn.close()
+    return message_id
+
+
+def get_chat_messages(session_id: str, limit: int = 50) -> list:
+    """Get chat messages for a session, ordered by creation time."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT id, role, content, sources_json, created_at
+        FROM chat_messages
+        WHERE session_id = ?
+        ORDER BY created_at ASC
+        LIMIT ?
+    """, (session_id, limit))
+    rows = cursor.fetchall()
+    conn.close()
+    return rows_to_dicts(rows)
+
+
+def get_recent_chat_sessions(limit: int = 10) -> list:
+    """Get list of recent chat sessions with their last message."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT session_id,
+               MAX(created_at) as last_activity,
+               COUNT(*) as message_count
+        FROM chat_messages
+        GROUP BY session_id
+        ORDER BY last_activity DESC
+        LIMIT ?
+    """, (limit,))
+    rows = cursor.fetchall()
+    conn.close()
+    return rows_to_dicts(rows)
+
+
+def clear_chat_session(session_id: str):
+    """Clear all messages in a chat session."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM chat_messages WHERE session_id = ?", (session_id,))
+    conn.commit()
+    conn.close()
+
+
+def delete_old_chat_messages(days_old: int = 30):
+    """Delete chat messages older than specified days."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        DELETE FROM chat_messages
+        WHERE created_at < datetime('now', ?)
+    """, (f'-{days_old} days',))
+    deleted = cursor.rowcount
+    conn.commit()
+    conn.close()
+    return deleted
 
 
 # Initialise database when module is imported
