@@ -12,7 +12,15 @@ from googleapiclient.errors import HttpError
 import database as db
 
 # OAuth 2.0 configuration
-SCOPES = ['https://www.googleapis.com/auth/calendar.events']
+# OAuth scopes for Google APIs:
+# calendar - Full calendar access (read/write)
+# calendar.events - Create/modify calendar events
+# drive.file - Access to Drive files created by this app
+SCOPES = [
+    'https://www.googleapis.com/auth/calendar',
+    'https://www.googleapis.com/auth/calendar.events',
+    'https://www.googleapis.com/auth/drive.file'
+]
 REDIRECT_URI = 'http://localhost:8501'  # Streamlit default port
 
 
