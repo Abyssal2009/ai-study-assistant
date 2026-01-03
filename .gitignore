@@ -34,14 +34,23 @@ Thumbs.db
 data/backups/*.zip
 data/backups/*.json
 
-# Cloud credentials
+# Cloud credentials - NEVER commit these!
 *credentials*.json
+*-credentials.json
+service-account-*.json
 *token*.json
 google_token.json
 onedrive_token.json
+vision-credentials.json
 
 # Streamlit secrets (contains API keys)
 .streamlit/secrets.toml
+
+# Other sensitive files
+*.env
+.env.local
+*.key
+*.pem
 
 # Note images (user data - keep directory structure)
 data/images/notes/*.png

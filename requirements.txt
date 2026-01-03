@@ -4,7 +4,6 @@
 # Core
 streamlit>=1.28.0
 anthropic>=0.18.0
-pytesseract>=0.3.10
 Pillow>=10.0.0
 opencv-python>=4.8.0
 
@@ -12,10 +11,11 @@ opencv-python>=4.8.0
 sentence-transformers>=2.2.0
 numpy>=1.24.0
 
-# Google APIs - Drive Backup & Calendar Sync
+# Google APIs - Drive Backup, Calendar Sync & Vision OCR
 google-api-python-client>=2.100.0
 google-auth-httplib2>=0.1.1
 google-auth-oauthlib>=1.1.0
+google-cloud-vision>=3.4.0
 
 # Scheduling
 schedule>=1.2.0

@@ -173,6 +173,19 @@ def render():
         st.markdown("### 📷 Import from Image (OCR)")
         st.markdown("Upload a photo of handwritten or printed notes to convert to text.")
 
+        # Check Vision API availability
+        try:
+            import vision_ocr
+            vision_available = vision_ocr.is_vision_available()
+        except ImportError:
+            vision_available = False
+
+        if not vision_available:
+            st.error("Google Vision API is not configured. Please set up credentials.")
+            st.stop()
+
+        vision_ocr.show_api_cost_warning()
+
         uploaded_file = st.file_uploader(
             "Upload an image",
             type=['png', 'jpg', 'jpeg'],
@@ -182,63 +195,41 @@ def render():
         if uploaded_file:
             st.image(uploaded_file, caption="Uploaded Image", use_container_width=True)
 
-            # Import OCR utilities
+            # Image quality assessment
             try:
                 import ocr_utils
                 from PIL import Image
 
-                # Assess image quality
                 image = Image.open(uploaded_file)
                 quality_score, quality_msg = ocr_utils.assess_image_quality(image)
 
-                # Show quality indicator
                 if quality_score >= 60:
                     st.success(f"Image Quality: {quality_msg}")
                 elif quality_score >= 40:
                     st.warning(f"Image Quality: {quality_msg}")
                 else:
                     st.error(f"Image Quality: {quality_msg}")
-
-                # Show OpenCV status
-                if not ocr_utils.is_opencv_available():
-                    st.caption("Note: Install opencv-python for better preprocessing")
-
             except ImportError:
-                quality_score = 50  # Default if utils not available
+                pass  # Quality assessment optional
 
             if st.button("🔍 Extract Text", type="primary"):
                 with st.spinner("Processing image..."):
                     try:
-                        from PIL import Image
-                        import ocr_utils
-
-                        # Reset file pointer and open image
                         uploaded_file.seek(0)
-                        image = Image.open(uploaded_file)
+                        image_bytes = uploaded_file.read()
 
-                        # Use improved OCR with preprocessing
-                        text, confidence = ocr_utils.extract_text_with_confidence(image)
+                        text, words, avg_confidence = vision_ocr.extract_text_with_confidence(image_bytes)
 
-                        if text.strip():
+                        if text and text.strip():
                             st.success("Text extracted!")
-
-                            # Show confidence indicator
-                            if confidence >= 0.7:
-                                st.caption(f"Confidence: High ({confidence:.0%})")
-                            elif confidence >= 0.5:
-                                st.caption(f"Confidence: Medium ({confidence:.0%}) - Review for errors")
-                            else:
-                                st.caption(f"Confidence: Low ({confidence:.0%}) - May contain errors")
-
+                            vision_ocr.display_confidence_result(text, words, avg_confidence)
                             st.session_state.ocr_text = text
                             st.session_state.ocr_uploaded_file = uploaded_file
-                            st.text_area("Extracted Text:", value=text, height=200)
                         else:
-                            st.warning("No text could be extracted. Try a clearer image with better lighting.")
-                            st.info("Tips: Use good lighting, hold camera straight, ensure text is dark and readable.")
+                            st.warning("No text could be extracted. Try a clearer image.")
                     except Exception as e:
                         st.error(f"OCR Error: {str(e)}")
-                        st.info("Make sure Tesseract OCR is installed.")
+                        st.info("Check your Google Vision API credentials.")
 
             if 'ocr_text' in st.session_state and st.session_state.ocr_text:
                 st.markdown("---")

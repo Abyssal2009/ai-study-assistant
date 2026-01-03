@@ -440,14 +440,17 @@ def _extract_pdf_text(uploaded_file) -> str:
 
 
 def _extract_image_text(uploaded_file) -> str:
-    """Extract text from an image using OCR."""
+    """Extract text from an image using Vision API."""
     try:
-        import ocr_utils
-        from PIL import Image
+        import vision_ocr
+
+        if not vision_ocr.is_vision_available():
+            st.error("Google Vision API not configured")
+            return None
 
         uploaded_file.seek(0)
-        image = Image.open(uploaded_file)
-        text, confidence = ocr_utils.extract_text_with_confidence(image)
+        image_bytes = uploaded_file.read()
+        text = vision_ocr.extract_text_from_bytes(image_bytes)
         return text
     except Exception as e:
         st.error(f"OCR error: {e}")
