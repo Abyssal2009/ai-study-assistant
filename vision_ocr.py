@@ -26,12 +26,15 @@ def is_vision_available() -> bool:
     try:
         if 'google_vision' in st.secrets:
             creds_path = st.secrets['google_vision']['credentials_path']
-            return Path(creds_path).exists()
-    except Exception:
-        pass
 
-    # Check environment variable
-    return 'GOOGLE_APPLICATION_CREDENTIALS' in os.environ
+            # Convert to absolute path
+            if not os.path.isabs(creds_path):
+                creds_path = os.path.abspath(creds_path)
+
+            return os.path.exists(creds_path)
+        return False
+    except Exception:
+        return False
 
 
 def setup_vision_client():
@@ -41,19 +44,31 @@ def setup_vision_client():
         return None
 
     try:
-        # Set credentials from secrets if available
-        if 'google_vision' in st.secrets:
-            credentials_path = st.secrets['google_vision']['credentials_path']
-            if Path(credentials_path).exists():
-                os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = credentials_path
-            else:
-                st.error(f"Credentials file not found: {credentials_path}")
-                return None
+        # Get credentials path from secrets
+        if 'google_vision' not in st.secrets:
+            st.error("Google Vision not configured in secrets.toml")
+            return None
 
+        credentials_path = st.secrets['google_vision']['credentials_path']
+
+        # Convert to absolute path if needed
+        if not os.path.isabs(credentials_path):
+            credentials_path = os.path.abspath(credentials_path)
+
+        # Verify file exists
+        if not os.path.exists(credentials_path):
+            st.error(f"Credentials file not found at: {credentials_path}")
+            return None
+
+        # Set environment variable for Google Cloud
+        os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = credentials_path
+
+        # Create and return the client
         client = vision.ImageAnnotatorClient()
         return client
+
     except Exception as e:
-        st.error(f"Failed to initialize Vision API: {e}")
+        st.error(f"Failed to initialize Vision API: {str(e)}")
         return None
 
 

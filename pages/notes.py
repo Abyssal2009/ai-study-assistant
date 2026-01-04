@@ -233,7 +233,105 @@ def render():
 
             if 'ocr_text' in st.session_state and st.session_state.ocr_text:
                 st.markdown("---")
+
+                # AI Enhancement Section
+                st.markdown("### Enhance with AI")
+                st.caption("Let AI recognize the subject and create clear, structured study notes.")
+
+                # Check for API key
+                api_key = st.session_state.get('bubble_ace_api_key', '')
+                if not api_key:
+                    st.warning("Please set your Claude API key in Settings or Bubble Ace to use AI enhancement.")
+
+                if st.button("✨ Enhance Notes with AI", type="secondary", disabled=not api_key):
+                    with st.spinner("AI is enhancing your notes..."):
+                        try:
+                            import utils
+
+                            enhance_prompt = f"""You are an expert study note creator. A student has scanned handwritten/printed notes using OCR.
+
+TASK:
+1. Identify the subject and specific topic
+2. Fix any OCR errors or garbled text
+3. Reorganize into clear, structured study notes:
+   - Add clear headings
+   - Use bullet points for lists
+   - Highlight key terms with **bold**
+   - Remove redundancy
+   - Add brief clarifications where helpful
+4. Make the notes optimized for learning and revision
+
+Original scanned text:
+{st.session_state.ocr_text}
+
+Respond in this exact format:
+**Subject:** [detected subject, e.g., Biology, Maths, History]
+**Topic:** [specific topic covered]
+
+---
+
+[Your enhanced, well-structured notes here]"""
+
+                            response = utils.call_claude(api_key, enhance_prompt, model="sonnet")
+
+                            if response and not response.startswith("Error:"):
+                                st.session_state.ocr_enhanced = response
+                                st.session_state.use_enhanced = True
+
+                                # Try to extract subject and topic from response
+                                lines = response.split('\n')
+                                for line in lines:
+                                    if line.startswith('**Subject:**'):
+                                        st.session_state.detected_subject = line.replace('**Subject:**', '').strip()
+                                    elif line.startswith('**Topic:**'):
+                                        st.session_state.detected_topic = line.replace('**Topic:**', '').strip()
+
+                                st.success("Notes enhanced!")
+                                st.rerun()
+                            else:
+                                st.error(f"Enhancement failed: {response}")
+                        except Exception as e:
+                            error_msg = str(e)
+                            if "authentication_error" in error_msg or "invalid" in error_msg.lower() and "api" in error_msg.lower():
+                                st.error("Invalid API key. Please check your Claude API key.")
+                                st.info("""
+**To fix this:**
+1. Get your API key from [console.anthropic.com](https://console.anthropic.com/)
+2. Go to **Settings** or **Bubble Ace** page
+3. Enter your API key (starts with `sk-ant-...`)
+4. Try again
+                                """)
+                            else:
+                                st.error(f"Enhancement error: {error_msg}")
+
+                # Show comparison if enhanced version exists
+                if 'ocr_enhanced' in st.session_state and st.session_state.ocr_enhanced:
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.markdown("**Original (OCR)**")
+                        st.text_area("", value=st.session_state.ocr_text, height=250, key="orig_preview", disabled=True)
+                    with col2:
+                        st.markdown("**Enhanced (AI)**")
+                        st.markdown(st.session_state.ocr_enhanced[:1500] + "..." if len(st.session_state.ocr_enhanced) > 1500 else st.session_state.ocr_enhanced)
+
+                    use_enhanced = st.checkbox("Use AI-enhanced version", value=st.session_state.get('use_enhanced', True))
+                    st.session_state.use_enhanced = use_enhanced
+
+                st.markdown("---")
                 st.markdown("### Save as Note")
+
+                # Determine which content to use
+                if st.session_state.get('use_enhanced') and 'ocr_enhanced' in st.session_state:
+                    # Extract just the notes part (after the --- separator)
+                    enhanced = st.session_state.ocr_enhanced
+                    if '---' in enhanced:
+                        content_to_save = enhanced.split('---', 1)[1].strip()
+                    else:
+                        content_to_save = enhanced
+                    default_topic = st.session_state.get('detected_topic', '')
+                else:
+                    content_to_save = st.session_state.ocr_text
+                    default_topic = ''
 
                 with st.form("save_ocr"):
                     ocr_title = st.text_input("Note Title *")
@@ -243,8 +341,8 @@ def render():
                         format_func=lambda x: x['name'],
                         key="ocr_subject"
                     )
-                    ocr_topic = st.text_input("Topic (optional)")
-                    ocr_content = st.text_area("Content", value=st.session_state.ocr_text, height=200)
+                    ocr_topic = st.text_input("Topic (optional)", value=default_topic)
+                    ocr_content = st.text_area("Content", value=content_to_save, height=200)
                     save_image = st.checkbox("Save original image", value=True,
                                             help="Store the source image alongside the extracted text")
 
@@ -291,10 +389,9 @@ def render():
                                 st.success("Note saved!")
 
                             # Clean up session state
-                            if 'ocr_text' in st.session_state:
-                                del st.session_state.ocr_text
-                            if 'ocr_uploaded_file' in st.session_state:
-                                del st.session_state.ocr_uploaded_file
+                            for key in ['ocr_text', 'ocr_uploaded_file', 'ocr_enhanced', 'use_enhanced', 'detected_subject', 'detected_topic']:
+                                if key in st.session_state:
+                                    del st.session_state[key]
                             st.rerun()
 
     # TAB 4: Favourites
