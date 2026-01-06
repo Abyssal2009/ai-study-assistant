@@ -171,7 +171,6 @@ def render():
     # TAB 3: OCR Import
     with tab3:
         st.markdown("### 📷 Import from Image (OCR)")
-        st.markdown("Upload a photo of handwritten or printed notes to convert to text.")
 
         # Check Vision API availability
         try:
@@ -184,61 +183,243 @@ def render():
             st.error("Google Vision API is not configured. Please set up credentials.")
             st.stop()
 
-        vision_ocr.show_api_cost_warning()
+        # Info banner about the OCR engine
+        vision_ocr.show_ocr_info_banner()
 
-        uploaded_file = st.file_uploader(
-            "Upload an image",
-            type=['png', 'jpg', 'jpeg'],
-            help="Supported formats: PNG, JPG, JPEG"
+        # Usage tracker
+        vision_ocr.show_usage_tracker()
+
+        # Quality tips
+        vision_ocr.show_quality_tips()
+
+        st.markdown("---")
+
+        # Image preprocessing option
+        auto_enhance = st.checkbox(
+            "Auto-enhance image quality",
+            value=False,
+            help="Enhance contrast (1.5x) and sharpness (1.3x) before OCR for better results"
         )
 
-        if uploaded_file:
-            st.image(uploaded_file, caption="Uploaded Image", use_container_width=True)
+        # Batch file upload
+        uploaded_files = st.file_uploader(
+            "Upload images",
+            type=['png', 'jpg', 'jpeg'],
+            help="Supported formats: PNG, JPG, JPEG. Select multiple files for batch processing.",
+            accept_multiple_files=True
+        )
 
-            # Image quality assessment
-            try:
-                import ocr_utils
-                from PIL import Image
+        if uploaded_files:
+            # Initialize batch results storage
+            if 'ocr_batch_results' not in st.session_state:
+                st.session_state.ocr_batch_results = []
 
-                image = Image.open(uploaded_file)
-                quality_score, quality_msg = ocr_utils.assess_image_quality(image)
+            # Show uploaded images
+            st.markdown(f"**{len(uploaded_files)} image(s) uploaded**")
 
-                if quality_score >= 60:
-                    st.success(f"Image Quality: {quality_msg}")
-                elif quality_score >= 40:
-                    st.warning(f"Image Quality: {quality_msg}")
-                else:
-                    st.error(f"Image Quality: {quality_msg}")
-            except ImportError:
-                pass  # Quality assessment optional
+            # Extract All button for batch
+            if st.button("🔍 Extract Text from All", type="primary"):
+                st.session_state.ocr_batch_results = []
 
-            if st.button("🔍 Extract Text", type="primary"):
-                with st.spinner("Processing image..."):
-                    try:
-                        uploaded_file.seek(0)
-                        image_bytes = uploaded_file.read()
+                progress_bar = st.progress(0)
+                for i, uploaded_file in enumerate(uploaded_files):
+                    with st.spinner(f"Processing {uploaded_file.name}..."):
+                        try:
+                            uploaded_file.seek(0)
+                            image_bytes = uploaded_file.read()
 
-                        text, words, avg_confidence = vision_ocr.extract_text_with_confidence(image_bytes)
+                            # Apply preprocessing if enabled
+                            if auto_enhance:
+                                image_bytes = vision_ocr.preprocess_image(image_bytes)
 
-                        if text and text.strip():
-                            st.success("Text extracted!")
-                            vision_ocr.display_confidence_result(text, words, avg_confidence)
-                            st.session_state.ocr_text = text
-                            st.session_state.ocr_uploaded_file = uploaded_file
-                        else:
-                            st.warning("No text could be extracted. Try a clearer image.")
-                    except Exception as e:
-                        st.error(f"OCR Error: {str(e)}")
-                        st.info("Check your Google Vision API credentials.")
+                            text, words, avg_confidence, detected_language = vision_ocr.extract_text_with_confidence(image_bytes)
 
-            if 'ocr_text' in st.session_state and st.session_state.ocr_text:
+                            # Increment usage tracker
+                            vision_ocr.increment_usage()
+
+                            st.session_state.ocr_batch_results.append({
+                                'filename': uploaded_file.name,
+                                'text': text if text else "",
+                                'words': words,
+                                'confidence': avg_confidence,
+                                'language': detected_language,
+                                'uploaded_file': uploaded_file
+                            })
+                        except Exception as e:
+                            st.session_state.ocr_batch_results.append({
+                                'filename': uploaded_file.name,
+                                'text': "",
+                                'words': [],
+                                'confidence': 0,
+                                'language': None,
+                                'error': str(e)
+                            })
+
+                    progress_bar.progress((i + 1) / len(uploaded_files))
+
+                st.success(f"Processed {len(uploaded_files)} image(s)!")
+                st.rerun()
+
+            # Display batch results
+            if st.session_state.get('ocr_batch_results'):
                 st.markdown("---")
+                st.markdown("### Extraction Results")
+
+                all_texts = []
+
+                for i, result in enumerate(st.session_state.ocr_batch_results):
+                    with st.expander(f"📄 {result['filename']}", expanded=(len(st.session_state.ocr_batch_results) == 1)):
+                        if result.get('error'):
+                            st.error(f"Error: {result['error']}")
+                        elif result['text']:
+                            # Display metrics and editable text
+                            edited_text = vision_ocr.display_confidence_result(
+                                result['text'],
+                                result['words'],
+                                result['confidence'],
+                                result['language'],
+                                key_suffix=f"batch_{i}"
+                            )
+                            # Update result with edited text
+                            result['text'] = edited_text
+                            all_texts.append(edited_text)
+
+                            st.markdown("---")
+
+                            # Save options for this image
+                            st.markdown("**Save Options:**")
+                            save_cols = st.columns(3)
+
+                            with save_cols[0]:
+                                if st.button("💾 Save as Note", key=f"save_note_{i}"):
+                                    st.session_state.ocr_text = result['text']
+                                    st.session_state.ocr_uploaded_file = result.get('uploaded_file')
+                                    st.session_state.save_single_ocr = True
+                                    st.rerun()
+
+                            with save_cols[1]:
+                                if st.button("🃏 Convert to Flashcards", key=f"flashcards_{i}"):
+                                    st.session_state.ocr_for_flashcards = result['text']
+                                    st.session_state.flashcard_source_file = result['filename']
+                                    st.rerun()
+
+                            with save_cols[2]:
+                                st.download_button(
+                                    "📥 Download TXT",
+                                    data=result['text'],
+                                    file_name=f"{Path(result['filename']).stem}_extracted.txt",
+                                    mime="text/plain",
+                                    key=f"download_{i}"
+                                )
+                        else:
+                            st.warning("No text could be extracted from this image.")
+
+                # Combined download for batch
+                if len(all_texts) > 1:
+                    st.markdown("---")
+                    separator = "\n\n" + "="*50 + "\n\n"
+                    combined_text = separator.join([
+                        f"--- {result['filename']} ---\n{result['text']}"
+                        for result in st.session_state.ocr_batch_results
+                        if result['text']
+                    ])
+                    st.download_button(
+                        "📥 Download All Combined",
+                        data=combined_text,
+                        file_name="all_extracted_text.txt",
+                        mime="text/plain",
+                        type="primary"
+                    )
+
+            # Convert to Flashcards section
+            if 'ocr_for_flashcards' in st.session_state and st.session_state.ocr_for_flashcards:
+                st.markdown("---")
+                st.markdown("### 🃏 Convert to Flashcards")
+                st.caption(f"Source: {st.session_state.get('flashcard_source_file', 'Unknown')}")
+
+                api_key = st.session_state.get('bubble_ace_api_key', '')
+                if not api_key:
+                    st.warning("Please set your Claude API key in Settings or Bubble Ace to generate flashcards.")
+                else:
+                    if st.button("Generate Flashcards", type="primary"):
+                        with st.spinner("AI is creating flashcards..."):
+                            try:
+                                import utils
+
+                                flashcard_prompt = f"""Create study flashcards from these notes. Extract key concepts, definitions, and important facts.
+
+Notes:
+{st.session_state.ocr_for_flashcards}
+
+Return flashcards in this exact format (one per line):
+Q: [question]
+A: [answer]
+
+Q: [question]
+A: [answer]
+
+Create 5-10 high-quality flashcards focusing on the most important concepts."""
+
+                                response = utils.call_claude(api_key, flashcard_prompt, model="sonnet")
+
+                                if response and not response.startswith("Error:"):
+                                    st.session_state.generated_flashcards = response
+                                    st.success("Flashcards generated!")
+                                else:
+                                    st.error(f"Generation failed: {response}")
+                            except Exception as e:
+                                st.error(f"Error: {str(e)}")
+
+                    if 'generated_flashcards' in st.session_state:
+                        st.text_area("Generated Flashcards", st.session_state.generated_flashcards, height=300)
+
+                        # Parse and save flashcards
+                        if st.button("Save Flashcards to Database"):
+                            try:
+                                # Parse Q: A: format
+                                lines = st.session_state.generated_flashcards.split('\n')
+                                current_q = None
+                                saved_count = 0
+
+                                for line in lines:
+                                    line = line.strip()
+                                    if line.startswith('Q:'):
+                                        current_q = line[2:].strip()
+                                    elif line.startswith('A:') and current_q:
+                                        answer = line[2:].strip()
+                                        # Save to database
+                                        db.add_flashcard(
+                                            subject_id=subjects[0]['id'],  # Default to first subject
+                                            question=current_q,
+                                            answer=answer
+                                        )
+                                        saved_count += 1
+                                        current_q = None
+
+                                if saved_count > 0:
+                                    st.success(f"Saved {saved_count} flashcards!")
+                                    del st.session_state.generated_flashcards
+                                    del st.session_state.ocr_for_flashcards
+                                else:
+                                    st.warning("No flashcards found to save.")
+                            except Exception as e:
+                                st.error(f"Failed to save: {e}")
+
+                    if st.button("Cancel", key="cancel_flashcards"):
+                        del st.session_state.ocr_for_flashcards
+                        if 'generated_flashcards' in st.session_state:
+                            del st.session_state.generated_flashcards
+                        st.rerun()
+
+            # Single note save form (triggered from batch results)
+            if st.session_state.get('save_single_ocr') and 'ocr_text' in st.session_state:
+                st.markdown("---")
+                st.markdown("### Save as Note")
 
                 # AI Enhancement Section
-                st.markdown("### Enhance with AI")
+                st.markdown("#### Enhance with AI (optional)")
                 st.caption("Let AI recognize the subject and create clear, structured study notes.")
 
-                # Check for API key
                 api_key = st.session_state.get('bubble_ace_api_key', '')
                 if not api_key:
                     st.warning("Please set your Claude API key in Settings or Bubble Ace to use AI enhancement.")
@@ -294,13 +475,6 @@ Respond in this exact format:
                             error_msg = str(e)
                             if "authentication_error" in error_msg or "invalid" in error_msg.lower() and "api" in error_msg.lower():
                                 st.error("Invalid API key. Please check your Claude API key.")
-                                st.info("""
-**To fix this:**
-1. Get your API key from [console.anthropic.com](https://console.anthropic.com/)
-2. Go to **Settings** or **Bubble Ace** page
-3. Enter your API key (starts with `sk-ant-...`)
-4. Try again
-                                """)
                             else:
                                 st.error(f"Enhancement error: {error_msg}")
 
@@ -317,12 +491,8 @@ Respond in this exact format:
                     use_enhanced = st.checkbox("Use AI-enhanced version", value=st.session_state.get('use_enhanced', True))
                     st.session_state.use_enhanced = use_enhanced
 
-                st.markdown("---")
-                st.markdown("### Save as Note")
-
                 # Determine which content to use
                 if st.session_state.get('use_enhanced') and 'ocr_enhanced' in st.session_state:
-                    # Extract just the notes part (after the --- separator)
                     enhanced = st.session_state.ocr_enhanced
                     if '---' in enhanced:
                         content_to_save = enhanced.split('---', 1)[1].strip()
@@ -389,10 +559,19 @@ Respond in this exact format:
                                 st.success("Note saved!")
 
                             # Clean up session state
-                            for key in ['ocr_text', 'ocr_uploaded_file', 'ocr_enhanced', 'use_enhanced', 'detected_subject', 'detected_topic']:
+                            for key in ['ocr_text', 'ocr_uploaded_file', 'ocr_enhanced', 'use_enhanced',
+                                       'detected_subject', 'detected_topic', 'save_single_ocr', 'ocr_batch_results']:
                                 if key in st.session_state:
                                     del st.session_state[key]
                             st.rerun()
+
+                # Cancel button
+                if st.button("Cancel", key="cancel_save"):
+                    for key in ['ocr_text', 'ocr_uploaded_file', 'ocr_enhanced', 'use_enhanced',
+                               'detected_subject', 'detected_topic', 'save_single_ocr']:
+                        if key in st.session_state:
+                            del st.session_state[key]
+                    st.rerun()
 
     # TAB 4: Favourites
     with tab4:
