@@ -93,49 +93,97 @@ def render():
                 if 'selected_note_id' in st.session_state:
                     note = db.get_note_by_id(st.session_state.selected_note_id)
                     if note:
-                        st.markdown(f"### {note['title']}")
-                        st.caption(f"{note['subject_name']} | {note.get('topic', 'No topic')}")
-                        st.markdown("---")
-                        st.markdown(note['content'])
+                        # Check if we're editing this note
+                        if st.session_state.get('editing_note') and st.session_state.editing_note['id'] == note['id']:
+                            st.markdown("### ✏️ Edit Note")
 
-                        # Display associated images if any
-                        note_images = db.get_note_images(note['id'])
-                        if note_images:
-                            st.markdown("---")
-                            st.markdown("#### 📷 Source Images")
-                            img_cols = st.columns(min(len(note_images), 3))
-                            for i, img in enumerate(note_images):
-                                with img_cols[i % 3]:
-                                    if os.path.exists(img['file_path']):
-                                        st.image(img['file_path'], caption=img['original_filename'],
-                                                use_container_width=True)
-                                        st.caption(f"Size: {img['file_size'] // 1024}KB")
+                            # Find current subject index for selectbox
+                            current_subject_idx = 0
+                            for i, s in enumerate(subjects):
+                                if s['id'] == note['subject_id']:
+                                    current_subject_idx = i
+                                    break
+
+                            with st.form("edit_note_form"):
+                                edit_title = st.text_input("Title *", value=note['title'])
+                                edit_subject = st.selectbox(
+                                    "Subject *",
+                                    options=subjects,
+                                    index=current_subject_idx,
+                                    format_func=lambda x: x['name']
+                                )
+                                edit_topic = st.text_input("Topic (optional)", value=note.get('topic', '') or '')
+                                edit_content = st.text_area("Content *", value=note['content'], height=300)
+
+                                col_save, col_cancel = st.columns(2)
+                                with col_save:
+                                    save_clicked = st.form_submit_button("💾 Save Changes", type="primary")
+                                with col_cancel:
+                                    cancel_clicked = st.form_submit_button("Cancel")
+
+                                if save_clicked:
+                                    if edit_title and edit_content:
+                                        db.update_note(
+                                            note_id=note['id'],
+                                            title=edit_title,
+                                            content=edit_content,
+                                            topic=edit_topic if edit_topic else None,
+                                            subject_id=edit_subject['id']
+                                        )
+                                        del st.session_state.editing_note
+                                        st.success("Note updated!")
+                                        st.rerun()
                                     else:
-                                        st.warning(f"Image not found: {img['original_filename']}")
+                                        st.error("Title and content are required.")
 
-                        st.markdown("---")
+                                if cancel_clicked:
+                                    del st.session_state.editing_note
+                                    st.rerun()
+                        else:
+                            st.markdown(f"### {note['title']}")
+                            st.caption(f"{note['subject_name']} | {note.get('topic', 'No topic')}")
+                            st.markdown("---")
+                            st.markdown(note['content'])
 
-                        action_col1, action_col2, action_col3 = st.columns(3)
-                        with action_col1:
-                            fav_text = "Remove ⭐" if note.get('is_favourite') else "Add ⭐"
-                            if st.button(fav_text):
-                                db.toggle_note_favourite(note['id'])
-                                st.rerun()
-                        with action_col2:
-                            if st.button("✏️ Edit"):
-                                st.session_state.editing_note = note
-                        with action_col3:
-                            if st.button("🗑️ Delete"):
-                                # Delete associated images from disk
-                                for img in note_images:
-                                    try:
+                            # Display associated images if any
+                            note_images = db.get_note_images(note['id'])
+                            if note_images:
+                                st.markdown("---")
+                                st.markdown("#### 📷 Source Images")
+                                img_cols = st.columns(min(len(note_images), 3))
+                                for i, img in enumerate(note_images):
+                                    with img_cols[i % 3]:
                                         if os.path.exists(img['file_path']):
-                                            os.remove(img['file_path'])
-                                    except OSError:
-                                        pass  # File deletion failed, continue anyway
-                                db.delete_note(note['id'])
-                                del st.session_state.selected_note_id
-                                st.rerun()
+                                            st.image(img['file_path'], caption=img['original_filename'],
+                                                    use_container_width=True)
+                                            st.caption(f"Size: {img['file_size'] // 1024}KB")
+                                        else:
+                                            st.warning(f"Image not found: {img['original_filename']}")
+
+                            st.markdown("---")
+
+                            action_col1, action_col2, action_col3 = st.columns(3)
+                            with action_col1:
+                                fav_text = "Remove ⭐" if note.get('is_favourite') else "Add ⭐"
+                                if st.button(fav_text):
+                                    db.toggle_note_favourite(note['id'])
+                                    st.rerun()
+                            with action_col2:
+                                if st.button("✏️ Edit"):
+                                    st.session_state.editing_note = note
+                                    st.rerun()
+                            with action_col3:
+                                if st.button("🗑️ Delete"):
+                                    # Delete associated images from disk
+                                    for img in note_images:
+                                        try:
+                                            if os.path.exists(img['file_path']):
+                                                os.remove(img['file_path'])
+                                        except OSError:
+                                            pass  # File deletion failed, continue anyway
+                                    db.delete_note(note['id'])
+                                    del st.session_state.selected_note_id
+                                    st.rerun()
                 else:
                     st.info("Select a note from the list to view it")
         else:
