@@ -76,4 +76,4 @@ All your data is stored locally in `study.db`. Nothing is sent to external serve
 
 ---
 
-Built for GCSE success!
+Built for IGCSE success!
