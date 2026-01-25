@@ -3,13 +3,18 @@ Google Calendar Integration for Exam Sync.
 Handles OAuth 2.0 authentication and syncing exams to Google Calendar.
 """
 
+import os
 import streamlit as st
 from datetime import datetime, timedelta
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+from dotenv import load_dotenv
 import database as db
+
+# Load environment variables
+load_dotenv()
 
 # OAuth 2.0 configuration
 # OAuth scopes for Google APIs:
@@ -25,14 +30,16 @@ REDIRECT_URI = 'http://localhost:8501'  # Streamlit default port
 
 
 def get_oauth_config():
-    """Get OAuth configuration from Streamlit secrets."""
-    try:
+    """Get OAuth configuration from environment variables."""
+    client_id = os.getenv('GOOGLE_CALENDAR_CLIENT_ID')
+    client_secret = os.getenv('GOOGLE_CALENDAR_CLIENT_SECRET')
+
+    if client_id and client_secret:
         return {
-            'client_id': st.secrets['google_calendar']['client_id'],
-            'client_secret': st.secrets['google_calendar']['client_secret']
+            'client_id': client_id,
+            'client_secret': client_secret
         }
-    except (KeyError, FileNotFoundError):
-        return None
+    return None
 
 
 def get_calendar_auth_url() -> str:

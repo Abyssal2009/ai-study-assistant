@@ -1310,27 +1310,31 @@ def get_all_flashcards(subject_id: int = None) -> list:
     return rows_to_dicts(cards)
 
 
-def get_due_flashcards(subject_id: int = None) -> list:
-    """Get all flashcards that are due for review today or earlier."""
+def get_due_flashcards(subject_id: int = None, limit: int = None) -> list:
+    """Get flashcards that are due for review today or earlier."""
     conn = get_connection()
     cursor = conn.cursor()
     today = date.today().isoformat()
 
+    limit_clause = f"LIMIT {limit}" if limit else ""
+
     if subject_id:
-        cursor.execute("""
+        cursor.execute(f"""
             SELECT f.*, s.name as subject_name, s.colour as subject_colour
             FROM flashcards f
             JOIN subjects s ON f.subject_id = s.id
             WHERE f.next_review <= ? AND f.subject_id = ?
             ORDER BY f.next_review ASC, f.ease_factor ASC
+            {limit_clause}
         """, (today, subject_id))
     else:
-        cursor.execute("""
+        cursor.execute(f"""
             SELECT f.*, s.name as subject_name, s.colour as subject_colour
             FROM flashcards f
             JOIN subjects s ON f.subject_id = s.id
             WHERE f.next_review <= ?
             ORDER BY f.next_review ASC, f.ease_factor ASC
+            {limit_clause}
         """, (today,))
 
     cards = cursor.fetchall()

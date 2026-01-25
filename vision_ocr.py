@@ -6,6 +6,10 @@ Provides high-accuracy text extraction from images using Google Cloud Vision.
 import streamlit as st
 import os
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # Track if Vision API is available
 VISION_AVAILABLE = False
@@ -24,9 +28,8 @@ def is_vision_available() -> bool:
 
     # Check if credentials are configured
     try:
-        if 'google_vision' in st.secrets:
-            creds_path = st.secrets['google_vision']['credentials_path']
-
+        creds_path = os.getenv('GOOGLE_VISION_CREDENTIALS_PATH')
+        if creds_path:
             # Convert to absolute path
             if not os.path.isabs(creds_path):
                 creds_path = os.path.abspath(creds_path)
@@ -38,18 +41,17 @@ def is_vision_available() -> bool:
 
 
 def setup_vision_client():
-    """Initialize Google Vision API client using secrets.toml."""
+    """Initialize Google Vision API client using environment variables."""
     if not VISION_AVAILABLE:
         st.error("Google Cloud Vision library not installed. Run: pip install google-cloud-vision")
         return None
 
     try:
-        # Get credentials path from secrets
-        if 'google_vision' not in st.secrets:
-            st.error("Google Vision not configured in secrets.toml")
+        # Get credentials path from environment
+        credentials_path = os.getenv('GOOGLE_VISION_CREDENTIALS_PATH')
+        if not credentials_path:
+            st.error("Google Vision not configured. Set GOOGLE_VISION_CREDENTIALS_PATH in .env")
             return None
-
-        credentials_path = st.secrets['google_vision']['credentials_path']
 
         # Convert to absolute path if needed
         if not os.path.isabs(credentials_path):
